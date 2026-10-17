@@ -4,7 +4,7 @@ The login request (URL, headers, body) may reference environment variables as ${
 passwords live. Nothing secret is stored by sprat.
 
     login = LoginConfig(url="https://auth.example.com/api/auth/login",
-                        body='{"email": "qa@example.com", "password": "${RZ_PASSWORD}"}',
+                        body='{"email": "qa@example.com", "password": "${QA_PASSWORD}"}',
                         token_path="data.accessToken", token_type="bearer")
     provider = TokenProvider(login)
     provider.headers()  # {"Authorization": "Bearer eyJ..."}, refreshed automatically

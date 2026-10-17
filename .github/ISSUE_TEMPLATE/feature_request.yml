@@ -1,0 +1,15 @@
+name: Feature request
+description: A new check, stage or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this catch or solve
+      description: A real example helps most, such as a bug SPRAT missed in your API.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How you'd like it to work

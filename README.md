@@ -1,8 +1,69 @@
-# SPRAT — Spec Probing, Robustness & Attack Testing
+# SPRAT
 
-Point it at a Swagger/OpenAPI URL and it tests the API end to end. The backend
-language doesn't matter (.NET, Express, anything) — everything goes through the
-spec and HTTP.
+**Spec Probing, Robustness & Attack Testing.** Point SPRAT at an OpenAPI/Swagger
+spec and it tests the API the way a careful tester would. It lints the spec, fuzzes
+every endpoint, sends the wrong type to every field, checks that user B can't read
+user A's data, and runs an OWASP ZAP scan. You get one report, and every finding
+comes with the request it sent, the response it got, and what a correct API should
+have done.
+
+[![Tests](https://github.com/rigsutra/sprat/actions/workflows/test.yml/badge.svg)](https://github.com/rigsutra/sprat/actions/workflows/test.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
+The backend language doesn't matter. Everything goes through the spec and HTTP, so
+.NET, Express, Spring, FastAPI and Go APIs all work the same way.
+
+> **Run it against staging, never production.** Fuzzing and ZAP send thousands of
+> requests, including POST/PUT/DELETE with garbage data. Use test accounts.
+
+## Why SPRAT
+
+Schemathesis, Spectral and ZAP are each good at one job. Running all three means
+three installs, three configs, three report formats, and wiring login tokens into
+each of them by hand. SPRAT runs them in one pass with one login setup, renews
+tokens mid-run, and adds two checks the others don't do:
+
+- **Wrong-type probing.** It names the exact field that accepted `"1"` for an
+  integer or `null` for a required string, instead of one generic "accepted invalid
+  input" per endpoint.
+- **BOLA.** You list a few resources user A owns; SPRAT confirms A can read them,
+  then replays each request as user B and flags any 2xx. Scanners can't find this
+  on their own because they don't know who owns what.
+
+It comes with a web UI for day-to-day use and a CLI whose exit code can gate CI.
+
+## Quick start
+
+Needs Python 3.10 or newer. Node.js (for `lint`) and Docker (for `zap`) are
+optional. A stage that can't run is reported as `skipped`, never as passed.
+
+```
+git clone https://github.com/rigsutra/sprat.git
+cd sprat
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e .
+```
+
+Try it on the bundled demo API, which has planted bugs:
+
+```
+uvicorn examples.demo_api:app --port 8000      # terminal 1
+sprat run --config examples/demo.yaml          # terminal 2
+```
+
+SPRAT reports an admin endpoint that never checks the token, an order that user B
+can read although it belongs to user A, a 500 on a negative price, and fields that
+accept `"1"` for an integer or `"yes"` for a boolean. The report is in
+`reports/demo/report.html`.
+
+For your own API, start the web UI and paste the app's URL. SPRAT finds the spec
+by itself:
+
+```
+sprat ui        # then open http://localhost:8787
+```
 
 ## What it checks
 
@@ -14,17 +75,6 @@ spec and HTTP.
 | `authz` | built in | Secured endpoints served without / with junk credentials, **BOLA** (user B reading user A's data), stack-trace leaks, missing security headers, wildcard CORS with credentials |
 | `zap` | OWASP ZAP API scan (Docker) | DAST: injection, header and misconfiguration issues |
 
-Stages that can't run (no Node, no Docker) are reported as `skipped` — never passed silently.
-
-## Setup
-
-```
-python -m venv .venv
-.venv\Scripts\pip install -e .
-```
-
-Optional: Node.js for `lint`, and Docker Desktop running for `zap`.
-
 ## Contents
 
 - [Web UI](#web-ui)
@@ -33,7 +83,8 @@ Optional: Node.js for `lint`, and Docker Desktop running for `zap`.
 - [Writing specs that test well](#writing-specs-that-test-well)
 - [HTTPS certificates](#https-certificates)
 - [Safety](#safety)
-- [Demo](#demo)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -281,17 +332,12 @@ Run against **staging**, never production. Fuzzing and ZAP active scanning send
 thousands of requests, including POST/PUT/DELETE with garbage data. Use test
 accounts for the tokens.
 
-## Demo
+## Contributing
 
-`examples/demo_api.py` is a small API with planted flaws:
+Bug reports, fixes and new checks are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup and how to run the tests. To report a security problem in SPRAT itself,
+follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
-```
-uvicorn examples.demo_api:app --port 8000
-sprat run --config examples/demo.yaml
-```
+## License
 
-## Tests
-
-```
-pytest tests
-```
+Apache-2.0. See [LICENSE](LICENSE).

@@ -1,0 +1,38 @@
+name: Bug report
+description: SPRAT crashed, missed a problem, or reported one that isn't real
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove tokens, passwords and private URLs before posting. Security problems in SPRAT itself go through SECURITY.md, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command or UI steps, and what you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Test-log entry or error output
+      description: For a wrong or missing finding, paste the matching entry from test-log.ndjson (Test log tab in the UI).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: SPRAT version
+      description: Output of `pip show sprat`, or the commit hash
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS, Python version, and API stack
+      placeholder: Windows 11, Python 3.12, ASP.NET Core 8 API

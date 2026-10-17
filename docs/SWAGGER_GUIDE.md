@@ -428,7 +428,7 @@ app.get("/swagger.json", (_req, res) =>
   // ...then catch-alls / notFoundHandler
   ```
 
-  RZ-NTT has this as `server/middleware/method-not-allowed.ts`, with tests. ASP.NET Core's endpoint
+  ASP.NET Core's endpoint
   routing already answers 405 when a route matches with another method; check that a
   `MapFallback` or catch-all route isn't turning it into 404.
 
