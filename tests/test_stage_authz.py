@@ -760,7 +760,7 @@ def test_real_authz_finds_demo_flaws(demo_api, tmp_path):
 def test_real_authz_bola_on_own_data_and_bad_ids(demo_api, tmp_path):
     spec = load_spec(demo_api + "/openapi.json")
     cfg = bola_cfg(None, {"path": "/users/{uid}/orders/{oid}", "params": {"uid": 1, "oid": 999}},
-                   base_url=demo_api, no_mutating_authz=True, exclude_paths=["admin"])
+                   base_url=demo_api, no_mutating_authz=True, exclude_paths=["admin", "reports"])
     res = authz.run(spec, cfg, tmp_path)
     assert "BOLA scenario inconclusive" in titles(res)
     assert not any(f.severity == "critical" for f in res.findings)

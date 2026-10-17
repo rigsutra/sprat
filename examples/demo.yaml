@@ -15,3 +15,6 @@ bola:
   - method: GET
     path: /users/{uid}/orders/{oid}
     params: {uid: 1, oid: 10}
+  - method: GET              # this one checks ownership: B gets 403, no finding
+    path: /users/{uid}/profile
+    params: {uid: 1}

@@ -53,9 +53,11 @@ uvicorn examples.demo_api:app --port 8000      # terminal 1
 sprat run --config examples/demo.yaml          # terminal 2
 ```
 
-SPRAT reports an admin endpoint that never checks the token, an order that user B
-can read although it belongs to user A, a 500 on a negative price, and fields that
-accept `"1"` for an integer or `"yes"` for a boolean. The report is in
+Among other things, SPRAT reports an admin endpoint that never checks the token, one
+that accepts any made-up token, an order that user B can read although it belongs
+to user A, a Python traceback sent back for a malformed token, a 500 on a negative
+price, and fields that accept `"1"` for an integer or `"yes"` for a boolean. The
+profile endpoint, which does check ownership, comes out clean. The report is in
 `reports/demo/report.html`.
 
 For your own API, start the web UI and paste the app's URL. SPRAT finds the spec

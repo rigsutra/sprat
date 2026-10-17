@@ -219,7 +219,7 @@ def test_tokens_and_keys_masked_in_logs_and_reports(secret_run):
         blob = (out / name).read_bytes()
         for s in [API_KEY, *secret_run["tokens"]]:
             assert s.encode() not in blob, (name, s[:20])
-    log = [json.loads(l) for l in (out / "test-log.ndjson").read_text(encoding="utf-8").splitlines()]
+    log = [json.loads(l) for l in (out / "test-log.ndjson").read_text(encoding="utf-8").split("\n") if l.strip()]
     sent = [e["request"]["headers"] for e in log if e["request"] and e["request"].get("headers")]
     assert any(h.get("authorization") == "Bearer ***" for h in sent)
     assert any(h.get("x-api-key") == "***" for h in sent)

@@ -38,7 +38,15 @@ ORDER = "GET /users/{uid}/orders/{oid}"
 ITEM = "GET /items/{item_id}"
 CREATE = "POST /items"
 HEALTH = "GET /health"
+LIST = "GET /items"
+PROFILE = "GET /users/{uid}/profile"
+ME = "GET /users/me"
+EXPORT = "GET /reports/export"
+COUPON = "GET /coupons/{code}"
+ALL_OPS = {ADMIN, ORDER, ITEM, CREATE, HEALTH, LIST, PROFILE, ME, EXPORT, COUPON}
+SECURED = {ADMIN, ORDER, PROFILE, ME, EXPORT}
 BOLA = [{"method": "GET", "path": "/users/{uid}/orders/{oid}", "params": {"uid": 1, "oid": 10}}]
+PROFILE_BOLA = {"method": "GET", "path": "/users/{uid}/profile", "params": {"uid": 1}}  # checks ownership
 FAST = "conformance,types,authz"  # the built-in Python stages (lint needs Node, zap needs Docker)
 
 
@@ -134,7 +142,9 @@ def find(report: dict, op: str, stage: str, title_part: str, min_sev: str = "inf
 
 
 def log_entries(out: Path) -> list[dict]:
-    return [json.loads(l) for l in (out / "test-log.ndjson").read_text(encoding="utf-8").splitlines() if l.strip()]
+    # split on newlines only: splitlines() also breaks on U+2028 etc., which fuzzed JSON strings contain
+    text = (out / "test-log.ndjson").read_text(encoding="utf-8")
+    return [json.loads(l) for l in text.split("\n") if l.strip()]
 
 
 def expected_exit(report: dict, fail_on: str = "high") -> int:
@@ -174,7 +184,8 @@ def assert_no_false_positives(report: dict) -> None:
 def test_cli_run_finds_every_planted_flaw(demo, workdir, capsys):
     out = workdir / "out"
     cfg = workdir / "bola.yaml"
-    cfg.write_text(yaml.safe_dump({"headers_b": {"Authorization": "Bearer token-b"}, "bola": BOLA}), encoding="utf-8")
+    cfg.write_text(yaml.safe_dump({"headers_b": {"Authorization": "Bearer token-b"}, "bola": BOLA + [PROFILE_BOLA]}),
+                   encoding="utf-8")
     rc = main(["run", f"{demo.base}/openapi.json", "--config", str(cfg), "-H", "Authorization: Bearer token-a",
                "--stages", FAST, "--max-examples", "5", "--fail-on", "high", "--out", str(out)])
     stdout = capsys.readouterr().out
@@ -203,15 +214,24 @@ def test_cli_run_finds_every_planted_flaw(demo, workdir, capsys):
     assert find(report, CREATE, "types", 'Field `id` (integer) accepted wrong types: numeric string "1"', "medium")
     assert find(report, CREATE, "types", 'Field `price` (number) accepted wrong types: numeric string "1.5"', "medium")
     assert find(report, CREATE, "conformance", "schema-violating request", "medium")
+    # 5. GET /users/me sends a Python traceback for a malformed token
+    assert find(report, ME, "authz", "Error response leaks stack trace", "medium")
+    # 6. GET /reports/export checks that a token is there, not that it's valid
+    assert find(report, EXPORT, "authz", "Secured endpoint accepted invalid credentials", "critical")
+    assert not find(report, EXPORT, "authz", "Secured endpoint accepted no credentials")
+    # 7. GET /coupons/{code} answers unknown codes with 200 and no `discount`
+    assert find(report, COUPON, "conformance", "Response violates schema", "medium")
+    # GET /users/{uid}/profile checks ownership: B is refused, so no BOLA finding
+    assert not find(report, PROFILE, "authz", "BOLA")
     assert_no_false_positives(report)
 
     # the reports agree with report.json
     html = (out / "test-report.html").read_text(encoding="utf-8")
-    assert all(op in html for op in (ADMIN, ORDER, CREATE, HEALTH))
+    assert all(op in html for op in ALL_OPS)
     assert "BOLA: user B accessed user A&#x27;s resource" in (out / "report.html").read_text(encoding="utf-8")
     cov = json.loads((out / "coverage.json").read_text(encoding="utf-8"))
     verdicts = {a["operation"]: a["verdict"] for a in cov["apis"]}
-    assert set(verdicts) == {ADMIN, ORDER, ITEM, CREATE, HEALTH}
+    assert set(verdicts) == ALL_OPS
     assert verdicts[ADMIN] == verdicts[ORDER] == verdicts[CREATE] == "problems"
     rows = list(csv.DictReader(io.StringIO((out / "test-log.csv").read_text(encoding="utf-8-sig"))))
     assert len(rows) == len(log_entries(out)) and {r["stage"] for r in rows} == {"conformance", "types", "authz"}
@@ -372,8 +392,8 @@ def test_web_ui_project_run_against_live_demo(demo, web_client):
     pid = r.json()["id"]
     p = client.get(f"/api/projects/{pid}").json()
     assert p["spec_info"]["title"] == "Demo API" and p["spec_info"]["base_url"] == base
-    assert {o["label"] for o in p["operations"]} == {ADMIN, ORDER, ITEM, CREATE, HEALTH}
-    assert {o["label"] for o in p["operations"] if o["secured"]} == {ADMIN, ORDER}
+    assert {o["label"] for o in p["operations"]} == ALL_OPS
+    assert {o["label"] for o in p["operations"] if o["secured"]} == SECURED
     assert [s["name"] for s in p["secrets"]] == ["DEMO_ALICE_PW", "DEMO_BOB_PW"] and "alice-pass" not in r.text
 
     t = client.post("/api/login/test", json={"login": body["login_a"], "project_id": pid}).json()
@@ -384,7 +404,7 @@ def test_web_ui_project_run_against_live_demo(demo, web_client):
     run = wait_run(client, rid)
     assert run["status"] == "done", run.get("error")
     assert demo.logins() - before >= 3  # A and B by the server, A again inside Schemathesis
-    assert set(run["tested"]) == {ADMIN, ORDER, ITEM, CREATE, HEALTH}
+    assert set(run["tested"]) == ALL_OPS
     assert {k: v["status"] for k, v in run["stages"].items()} == {"conformance": "ok", "types": "ok", "authz": "ok"}
     assert run["headers"] == {"login": "automatic"} and run["headers_b"] == {"login": "automatic"}
     assert any(f["stage"] == "auth" and "Logged in as user A" in f["msg"] for f in run["feed"])
