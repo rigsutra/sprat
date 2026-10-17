@@ -153,7 +153,7 @@ def secret_run(tmp_path_factory):
     tokens (so several are issued) and a static API key; everything under one temp dir, which is also
     the CWD (Schemathesis' .schemathesis/ cache lands there)."""
     root = tmp_path_factory.mktemp("secret-run")
-    mod = _load_demo("_sec_demo_api", ttl=33)
+    mod = _load_demo("_sec_demo_api", ttl=6)  # renewed every ~3 s
     env_before = {k: os.environ.get(k) for k in ("DEMO_ALICE_PW", "DEMO_BOB_PW", "DEMO_API_KEY")}
     cwd = os.getcwd()
     os.environ.update(DEMO_ALICE_PW=ALICE_PW, DEMO_BOB_PW=BOB_PW, DEMO_API_KEY=API_KEY)

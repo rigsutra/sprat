@@ -24,6 +24,7 @@ import pytest
 import uvicorn
 import yaml
 
+from sprat import runner
 from sprat.cli import main
 from sprat.models import sev_rank
 
@@ -110,8 +111,8 @@ def demo():
 
 @pytest.fixture(scope="module")
 def demo_short_ttl():
-    """Tokens live 34 s; sprat renews 30 s before expiry, so a new login every ~4 s."""
-    mod = load_demo("_e2e_demo_api_short_ttl", ttl=34)
+    """Tokens live 6 s (5-6 s, as exp is whole seconds); sprat renews them halfway, every ~3 s."""
+    mod = load_demo("_e2e_demo_api_short_ttl", ttl=6)
     with LiveServer(mod.app) as srv:
         srv.module = mod
         yield srv
@@ -306,7 +307,17 @@ def test_config_file_with_automatic_login_and_token_refresh(demo_short_ttl, work
     out = workdir / "out"
     path = workdir / "demo-login.yaml"
     path.write_text(yaml.safe_dump(login_config(srv.base, out)), encoding="utf-8")
-    assert httpx.get(f"{srv.base}/auth/stats").json()["ttl"] == 34
+    assert httpx.get(f"{srv.base}/auth/stats").json()["ttl"] == 6
+    # The run must outlive the first tokens whatever the machine's speed. User B's token is only used by
+    # authz, so wait before that stage until B's first token is dead on the server: the cross-user
+    # checks then only pass if sprat logged B in again in time.
+    real_authz = runner.STAGE_FUNCS["authz"]
+
+    def authz_after_first_token_expired(spec, cfg, out_dir):
+        time.sleep(max(0.0, cfg.auth_b.expires_at + 0.2 - time.time()))
+        return real_authz(spec, cfg, out_dir)
+
+    monkeypatch.setitem(runner.STAGE_FUNCS, "authz", authz_after_first_token_expired)
     before = srv.logins()
     rc = main(["run", "--config", str(path), "--stages", FAST])
     stdout = capsys.readouterr().out
@@ -315,12 +326,9 @@ def test_config_file_with_automatic_login_and_token_refresh(demo_short_ttl, work
     assert all(s["status"] == "ok" for s in report["stages"]), report["stages"]
     assert rc == 1 == expected_exit(report)  # findings, not a login error (2)
     assert "Logged in as user A (login #1)" in stdout and "Logged in as user B (login #1)" in stdout
-    # the run outlived the first tokens: sprat logged in again by itself. Checked by the logins, not
-    # by the run's duration: renewal is due ~4 s after login (34 s TTL, 30 s early), and exp is whole
-    # seconds, so a fast machine can renew and finish in under 4 s
-    logins = srv.logins() - before
-    assert logins > 3, logins  # 2 initial logins + Schemathesis' own + renewals
-    assert "(login #2)" in stdout
+    # the run outlived the first tokens: sprat logged in again by itself
+    assert "Logged in as user B (login #2)" in stdout
+    assert srv.logins() - before >= 4  # A and B, Schemathesis' own login, B's renewal
     # ...and in time: no request was ever refused because its token had expired
     entries = log_entries(out)
     assert not [e for e in entries if "Token expired" in ((e["response"] or {}).get("body") or "")]
