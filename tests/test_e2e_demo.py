@@ -299,7 +299,8 @@ def test_config_file_with_automatic_login_and_token_refresh(demo_short_ttl, work
     assert "Logged in as user A (login #1)" in stdout and "Logged in as user B (login #1)" in stdout
     # the run outlived the first tokens: sprat logged in again by itself
     logins = srv.logins() - before
-    assert took > 8 and logins > 3, (took, logins)  # 2 initial logins + Schemathesis' own + renewals
+    # renewal is due 34 - 30 = 4 s after login; how far past that the run goes depends on the machine
+    assert took > 4 and logins > 3, (took, logins)  # 2 initial logins + Schemathesis' own + renewals
     assert "(login #2)" in stdout
     # ...and in time: no request was ever refused because its token had expired
     entries = log_entries(out)

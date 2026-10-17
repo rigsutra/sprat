@@ -238,6 +238,14 @@ def test_csv_cuts_long_bodies_and_details(tmp_path):
     assert len(r["request_body"]) == 2000 and len(r["response_body"]) == 2000 and len(r["explanation"]) == 500
 
 
+def test_csv_writes_nul_from_fuzzed_bodies(tmp_path):
+    tl = TestLog(tmp_path / "l.ndjson")
+    tl.add("conformance", "s", request={"method": "POST", "url": "u", "body": '{"name": "a\x00b"}'})
+    assert write_csv(tl.path, tmp_path / "o.csv") == 1  # Python < 3.11 can't write NUL to CSV
+    r = next(csv.DictReader(io.StringIO((tmp_path / "o.csv").read_text(encoding="utf-8-sig"))))
+    assert r["request_body"] == '{"name": "a\\0b"}'
+
+
 def test_csv_of_missing_log_has_only_header(tmp_path):
     assert write_csv(tmp_path / "none.ndjson", tmp_path / "o.csv") == 0
     assert (tmp_path / "o.csv").read_text(encoding="utf-8-sig").strip() == ",".join(CSV_FIELDS)

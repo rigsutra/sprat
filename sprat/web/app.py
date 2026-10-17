@@ -524,8 +524,12 @@ def guide_download(name: str):
 
 @app.get("/static/{name}")
 def static(name: str):
-    f = (STATIC / name).resolve()
-    if f.parent != STATIC.resolve() or not f.is_file():
+    try:
+        f = (STATIC / name).resolve()
+        ok = f.parent == STATIC.resolve() and f.is_file()
+    except (OSError, ValueError):  # e.g. a NUL in the name, which Linux rejects with ValueError
+        ok = False
+    if not ok:
         raise HTTPException(404)
     return FileResponse(f, headers={"Cache-Control": "no-cache"})
 

@@ -190,8 +190,12 @@ def _detail_text(e: dict) -> str:
 
 
 def _cell(v):
-    """Text the target API controls must not run as a spreadsheet formula (CSV injection)."""
-    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+    """Text the target API controls must not run as a spreadsheet formula (CSV injection). NUL (sent by
+    fuzzing) is written as \\0: Python's csv module can't write it before 3.11."""
+    if not isinstance(v, str):
+        return v
+    v = v.replace("\0", "\\0")
+    return "'" + v if v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
 
 
 def write_csv(ndjson: Path, csv_path: Path) -> int:
