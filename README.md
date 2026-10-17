@@ -124,8 +124,9 @@ expires, give apitest the login API and it fetches tokens itself:
 
 During a run apitest logs in at the start and fetches a new token **30 seconds
 before the current one expires**: in its own tests, and inside Schemathesis (through
-a generated hooks file). ZAP can't renew mid-scan, so it gets a freshly fetched
-token right before it starts. Wrong credentials stop the run before anything is
+a generated hooks file). ZAP gets the token through its replacer rules; during the
+scan apitest logs in again 90 seconds before expiry and swaps the rule through ZAP's
+API (published on 127.0.0.1 only), so long scans don't end in 401s. Wrong credentials stop the run before anything is
 tested, with the login API's error message. User A and user B each have their own
 login. In a CLI config this is `login_a:` / `login_b:` (see
 `examples/demo-login.yaml`); the CLI has no secret store, so there `${NAME}` comes
