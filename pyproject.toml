@@ -30,7 +30,7 @@ dependencies = ["schemathesis>=4", "httpx", "pyyaml", "jinja2", "fastapi", "uvic
 
 [project.urls]
 Homepage = "https://github.com/rigsutra/sprat"
-Documentation = "https://github.com/rigsutra/sprat/tree/master/docs"
+Documentation = "https://github.com/rigsutra/sprat/tree/main/docs"
 Issues = "https://github.com/rigsutra/sprat/issues"
 
 [project.optional-dependencies]
