@@ -2,14 +2,14 @@
 
 Paste the block below into the project's AI instruction file (`CLAUDE.md`, `AGENTS.md`,
 `.github/copilot-instructions.md`, `.cursor/rules`, ...). Full reasoning and code samples:
-`docs/SWAGGER_GUIDE.md` in the apitest repo.
+`docs/SWAGGER_GUIDE.md` in the sprat repo.
 
 ---
 
 ```markdown
 ## API spec rules (OpenAPI / Swagger)
 
-This API is tested automatically from its OpenAPI spec (apitest: Spectral + Schemathesis +
+This API is tested automatically from its OpenAPI spec (sprat: Spectral + Schemathesis +
 auth/BOLA checks + OWASP ZAP). The spec must match the server's real behavior exactly. When you
 add or change an endpoint, update the spec in the same change.
 

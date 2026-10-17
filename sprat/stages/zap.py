@@ -196,7 +196,7 @@ def run(spec, cfg, out: Path) -> StageResult:
             zap_opts += ["-config", f"replacer.full_list({i}).{opt}"]
     if heap:
         zap_opts.append(f"-Xmx{heap}m")  # zap.sh uses it in place of its default heap
-    name = f"apitest-zap-{uuid.uuid4().hex[:8]}"
+    name = f"sprat-zap-{uuid.uuid4().hex[:8]}"
     cmd = ["docker", "run", "--rm", "--name", name, "--add-host", "host.docker.internal:host-gateway",
            "-v", f"{out.resolve()}:/zap/wrk:rw"]
     # ZAP's API, published to this machine only: renews the login token mid-scan and saves partial reports

@@ -105,7 +105,7 @@ async function pageProjects() {
   if (!projects.length) {
     view.innerHTML = `<div class="empty panel"><h2>No projects yet</h2>
       <p>A project is one API application: its Swagger, base URL, test users and settings.<br>
-      Enter the app's URL and apitest finds its Swagger and lists every API.</p>
+      Enter the app's URL and sprat finds its Swagger and lists every API.</p>
       <button class="primary" onclick="location.hash='#/new'">+ New project</button></div>`;
     return;
   }
@@ -288,7 +288,7 @@ function userAuthHtml(k, title, who, headers, login) {
     <div data-mode="login" ${auto ? "" : "hidden"}>
       <div class="login-test"><button type="button" class="secondary small" data-act="testlogin">Test login</button>
         <span data-out="loginres"></span></div>
-      <p class="hint">apitest logs in when a run starts and fetches a new token 30 seconds before the current one expires.</p>
+      <p class="hint">sprat logs in when a run starts and fetches a new token 30 seconds before the current one expires.</p>
     </div>
   </fieldset>`;
 }
@@ -342,7 +342,7 @@ function setupLogin(form, k, pid, pendingSecrets) {
   box.addEventListener("change", sync);
   sync();
 
-  /* ${NAME} values: project secrets, stored encrypted by apitest and never shown again */
+  /* ${NAME} values: project secrets, stored encrypted by sprat and never shown again */
   const varsBox = box.querySelector(`[data-vars=${k}]`);
   const usedNames = () => {
     const mode = (box.querySelector(`input[name=${k}_mode]:checked`) || {}).value;
@@ -458,7 +458,7 @@ function setupLogin(form, k, pid, pendingSecrets) {
       const ref = new Date(r.refresh_at * 1000).toLocaleTimeString();
       res.className = "ok-text";
       res.textContent = `✓ Logged in (${r.header}: ${r.token_preview}). Token expires at ${at}, in ${Math.round(r.expires_in / 60)} min ` +
-        `(from ${r.expiry_source}); apitest would renew it at ${ref}.`;
+        `(from ${r.expiry_source}); sprat would renew it at ${ref}.`;
     } catch (e) { res.className = "error"; res.textContent = e.message; }
   });
 }
@@ -480,7 +480,7 @@ function renderProjectForm(root, project, onSaved) {
       <label class="field">Application URL, Swagger UI page, or Swagger/OpenAPI JSON URL
         <div class="row"><input name="discover" placeholder="https://orders-staging.example.com" value="${esc(p.spec)}">
         <button type="button" class="primary" data-act="discover">Discover</button></div></label>
-      <p class="hint">For an app root, apitest tries the usual locations: <code>/swagger/v1/swagger.json</code> (ASP.NET Core),
+      <p class="hint">For an app root, sprat tries the usual locations: <code>/swagger/v1/swagger.json</code> (ASP.NET Core),
         <code>/openapi/v1.json</code> (.NET 9), <code>/api-docs</code> (swagger-ui-express), <code>/openapi.json</code>, <code>/v3/api-docs</code>, and more.</p>
       <div data-out="found"></div>
     </section>
@@ -729,7 +729,7 @@ async function pageProject(pid, tab) {
   });
   $("[data-act=yaml]", view).addEventListener("click", async () => {
     const text = await api(`/api/projects/${pid}/yaml`);
-    dialog("CLI config", `<p class="hint">Save as <code>${esc(pid)}.yaml</code> and run <code>apitest run --config ${esc(pid)}.yaml</code>.
+    dialog("CLI config", `<p class="hint">Save as <code>${esc(pid)}.yaml</code> and run <code>sprat run --config ${esc(pid)}.yaml</code>.
       <code>\${VAR}</code> values are read from the environment; replace <code>&lt;set me&gt;</code> or pass tokens with <code>-H</code>.</p>
       <textarea rows="18" readonly>${esc(text)}</textarea>`,
       [{ label: "Copy", cls: "primary", onClick: () => navigator.clipboard.writeText(text) }, { label: "Close" }]);

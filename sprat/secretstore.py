@@ -4,9 +4,9 @@ Projects refer to them as ${NAME} (e.g. in the login body). Values are encrypted
 (AES-128-CBC + HMAC-SHA256) and stored in <data dir>/secrets.json. They are never returned by the
 API, never included in exports, reports or logs, and deleted with their project.
 
-Key: APITEST_SECRET_KEY if set (a Fernet key, or any passphrase, which is hashed into one),
+Key: SPRAT_SECRET_KEY if set (a Fernet key, or any passphrase, which is hashed into one),
 otherwise a key generated once into <data dir>/.secret.key. Anyone who can read both that key file
-and secrets.json can decrypt, so on a shared server set APITEST_SECRET_KEY instead of relying on
+and secrets.json can decrypt, so on a shared server set SPRAT_SECRET_KEY instead of relying on
 the key file.
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ class SecretStore:
     def _f(self) -> Fernet:
         with self._key_lock:
             if self._fernet is None:
-                env = os.environ.get("APITEST_SECRET_KEY")
+                env = os.environ.get("SPRAT_SECRET_KEY")
                 self._fernet = _fernet_from(env) if env else Fernet(self._key_file())
             return self._fernet
 
@@ -77,7 +77,7 @@ class SecretStore:
 
     @property
     def key_source(self) -> str:
-        return "APITEST_SECRET_KEY" if os.environ.get("APITEST_SECRET_KEY") else str(self.dir / ".secret.key")
+        return "SPRAT_SECRET_KEY" if os.environ.get("SPRAT_SECRET_KEY") else str(self.dir / ".secret.key")
 
     # ---------- storage ----------
     def _read(self) -> dict:

@@ -14,12 +14,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from apitest.config import Config
-from apitest.models import Finding
-from apitest.proc import Cancelled, Result
-from apitest.spec import Operation, Spec
-from apitest.stages import zap
-from apitest.testlog import TestLog, iter_entries
+from sprat.config import Config
+from sprat.models import Finding
+from sprat.proc import Cancelled, Result
+from sprat.spec import Operation, Spec
+from sprat.stages import zap
+from sprat.testlog import TestLog, iter_entries
 
 SPEC_TEXT = '{"openapi": "3.0.3", "paths": {}}'
 
@@ -157,7 +157,7 @@ def test_command_line(docker, tmp_path):
     _run(docker, cfg=cfg)
     cmd, kw = docker.calls[0]
     name = cmd[cmd.index("--name") + 1]
-    assert name.startswith("apitest-zap-") and len(name) == len("apitest-zap-") + 8
+    assert name.startswith("sprat-zap-") and len(name) == len("sprat-zap-") + 8
     port = cmd[cmd.index("-p") + 1]
     assert cmd == ["docker", "run", "--rm", "--name", name, "--add-host", "host.docker.internal:host-gateway",
                    "-v", f"{docker.out.resolve()}:/zap/wrk:rw", "-p", port, "example/zap:1.2", "zap-api-scan.py",
@@ -502,7 +502,7 @@ def test_alert_without_instances_or_name(docker):
 
 
 def test_findings_map_to_operations_via_runner(docker):
-    from apitest.runner import annotate
+    from sprat.runner import annotate
     docker.report = {"site": [{"alerts": [
         _alert("A", "2", [{"uri": "http://host.docker.internal:8000/items/42?x=1", "method": "GET"}]),
         _alert("B", "2", [{"uri": "http://host.docker.internal:8000/items", "method": "POST"}]),

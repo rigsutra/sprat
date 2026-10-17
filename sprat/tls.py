@@ -1,12 +1,12 @@
-"""Which certificate authorities apitest trusts for HTTPS.
+"""Which certificate authorities sprat trusts for HTTPS.
 
 Python ships its own CA list (certifi) and ignores the operating system's. That breaks on
 machines where HTTPS is re-signed by something the OS trusts but certifi doesn't: antivirus
 web shields (Norton, Avast, Kaspersky...), corporate TLS inspection, an internal company CA.
-Browsers and curl work there, apitest would fail with CERTIFICATE_VERIFY_FAILED.
+Browsers and curl work there, sprat would fail with CERTIFICATE_VERIFY_FAILED.
 
-So apitest trusts certifi's list plus the Windows certificate store, plus an optional
-extra bundle from APITEST_CA_BUNDLE. Verification is never switched off.
+So sprat trusts certifi's list plus the Windows certificate store, plus an optional
+extra bundle from SPRAT_CA_BUNDLE. Verification is never switched off.
 
 The combined list is also written to a PEM file for the subprocesses: Schemathesis
 (--tls-verify) and Node/Spectral (NODE_EXTRA_CA_CERTS).
@@ -43,15 +43,15 @@ def _windows_pems() -> list[str]:
 
 @functools.lru_cache(maxsize=1)
 def ca_bundle() -> str:
-    """Path of a PEM file with every CA apitest trusts."""
+    """Path of a PEM file with every CA sprat trusts."""
     parts = [Path(certifi.where()).read_text(encoding="ascii")]
-    extra = os.environ.get("APITEST_CA_BUNDLE", "").strip()
+    extra = os.environ.get("SPRAT_CA_BUNDLE", "").strip()
     if extra:
         parts.append(Path(extra).read_text(encoding="ascii"))
     parts += _windows_pems()
     text = "\n".join(p.strip() for p in parts) + "\n"
     digest = hashlib.sha256(text.encode()).hexdigest()[:16]
-    path = Path(tempfile.gettempdir()) / f"apitest-ca-{digest}.pem"
+    path = Path(tempfile.gettempdir()) / f"sprat-ca-{digest}.pem"
     if not path.exists():
         tmp = path.with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(text, encoding="ascii")
@@ -72,6 +72,6 @@ def explain(exc: BaseException) -> str:
         text = f"The server's HTTPS certificate was rejected ({reason})."
         if "issuer" in reason or "self-signed" in reason or "self signed" in reason:
             text += (" If an antivirus or company proxy inspects HTTPS, or the server uses an internal CA, "
-                     "export that root certificate as PEM and set APITEST_CA_BUNDLE to the file.")
+                     "export that root certificate as PEM and set SPRAT_CA_BUNDLE to the file.")
         return text
     return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__

@@ -1,8 +1,8 @@
 import json
 
-from apitest import coverage
-from apitest.spec import Operation
-from apitest.testlog import TestLog
+from sprat import coverage
+from sprat.spec import Operation
+from sprat.testlog import TestLog
 
 
 def _ops():
@@ -62,7 +62,7 @@ def test_missing_permission_is_named(tmp_path):
 
 
 def test_blocked_and_method_probe_explanations():
-    from apitest.explain import blocked_by_auth, expected_for, permission_detail
+    from sprat.explain import blocked_by_auth, expected_for, permission_detail
     assert "Not really tested" in blocked_by_auth(403, "positive", "Random data", True)
     assert blocked_by_auth(401, "negative", "Missing `Authorization` at header", True) == ""  # an auth test itself
     assert blocked_by_auth(403, "positive", "x", False) == ""  # no credentials sent: an expected refusal
@@ -80,7 +80,7 @@ def test_successful_writes_are_warned_about(tmp_path):
 def test_repeated_server_error_without_failures_is_not_a_pass(tmp_path):
     """Schemathesis reports a repeated failure once; later identical 500s carry no failures."""
     from types import SimpleNamespace
-    from apitest.stages.conformance import log_scenarios
+    from sprat.stages.conformance import log_scenarios
     event = {"ScenarioFinished": {"phase": "stateful", "recorder": {
         "cases": {"c1": {"value": {"id": "c1", "method": "POST", "path": "/items", "meta": {}}}},
         "interactions": {"c1": {"request": {"method": "POST", "uri": "http://x/items", "headers": {}},

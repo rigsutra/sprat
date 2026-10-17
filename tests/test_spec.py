@@ -1,4 +1,4 @@
-"""Loading Swagger 2.0 / OpenAPI 3.x documents (apitest.spec) from files and URLs, and what is extracted."""
+"""Loading Swagger 2.0 / OpenAPI 3.x documents (sprat.spec) from files and URLs, and what is extracted."""
 import json
 import ssl
 
@@ -6,8 +6,8 @@ import httpx
 import pytest
 import yaml
 
-import apitest.discover as discover
-from apitest.spec import METHODS, Operation, Spec, filter_operations, load_spec, resolve
+import sprat.discover as discover
+from sprat.spec import METHODS, Operation, Spec, filter_operations, load_spec, resolve
 
 CTX = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 OK = {"responses": {"200": {"description": "ok"}}}

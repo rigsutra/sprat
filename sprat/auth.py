@@ -1,7 +1,7 @@
 """Automatic login: get a token from a login API, use it, and get a new one 30 s before it expires.
 
 The login request (URL, headers, body) may reference environment variables as ${VAR}; that's where
-passwords live. Nothing secret is stored by apitest.
+passwords live. Nothing secret is stored by sprat.
 
     login = LoginConfig(url="https://auth.example.com/api/auth/login",
                         body='{"email": "qa@example.com", "password": "${RZ_PASSWORD}"}',
@@ -293,7 +293,7 @@ class TokenProvider:
             raise LoginError(f"{self.label}: couldn't reach the login API ({e}).") from None
         nxt = getattr(r, "next_request", None)
         if nxt is not None:
-            raise LoginError(f"{self.label}: the login API redirected to {nxt.url.host}. apitest doesn't "
+            raise LoginError(f"{self.label}: the login API redirected to {nxt.url.host}. sprat doesn't "
                              "follow a login to another host, so the password isn't sent there; "
                              "use the final login URL instead.")
         if not 200 <= r.status_code < 300:

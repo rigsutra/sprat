@@ -4,15 +4,15 @@ import json
 
 import httpx
 
-from apitest import coverage, triage
-from apitest.config import Config
-from apitest.explain import failure_body
-from apitest.models import Finding
-from apitest.spec import Operation, Spec, apply_examples
-from apitest.stages import authz
-from apitest.stages import conformance as C
-from apitest.stages import types as T
-from apitest.testlog import TestLog, iter_entries
+from sprat import coverage, triage
+from sprat.config import Config
+from sprat.explain import failure_body
+from sprat.models import Finding
+from sprat.spec import Operation, Spec, apply_examples
+from sprat.stages import authz
+from sprat.stages import conformance as C
+from sprat.stages import types as T
+from sprat.testlog import TestLog, iter_entries
 
 from test_coverage_report import A, _build, op
 from test_stage_types import BASE, OAS, body_op, obj, run_stage

@@ -1,4 +1,4 @@
-"""Property-based tests (hypothesis) for the pure helpers across apitest."""
+"""Property-based tests (hypothesis) for the pure helpers across sprat."""
 import base64
 import datetime as dt
 import json
@@ -12,10 +12,10 @@ import pytest
 from cryptography.fernet import Fernet, InvalidToken
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 
-from apitest import auth, coverage, discover, secretstore, spec as S, testlog
-from apitest.config import ENV_REF, Config, expand_env, parse_header
-from apitest.spec import Operation, Spec, resolve
-from apitest.stages import types as T
+from sprat import auth, coverage, discover, secretstore, spec as S, testlog
+from sprat.config import ENV_REF, Config, expand_env, parse_header
+from sprat.spec import Operation, Spec, resolve
+from sprat.stages import types as T
 
 # database=None: nothing is written into the repo (no .hypothesis/ directory).
 # Cheap properties run 200 examples; heavier ones fewer, to keep the file well under ~30 s.
@@ -351,7 +351,7 @@ def test_to_epoch_far_future_naive_date():
 
 # ---------- config ----------
 
-VAR_NAMES = word("", string.ascii_uppercase + string.digits + "_", 8, min_size=1).map("APITEST_HYP_".__add__)
+VAR_NAMES = word("", string.ascii_uppercase + string.digits + "_", 8, min_size=1).map("SPRAT_HYP_".__add__)
 
 
 @MEDIUM
@@ -364,7 +364,7 @@ def test_expand_env_identity_without_references(s, variables):
 @MEDIUM
 @given(st.lists(st.text(alphabet=st.characters(blacklist_characters="$"), max_size=6) | VAR_NAMES.map(lambda n: ("ref", n)),
                 max_size=6),
-       st.lists(st.text(max_size=6) | st.just("${APITEST_HYP_OTHER}"), min_size=1, max_size=3))
+       st.lists(st.text(max_size=6) | st.just("${SPRAT_HYP_OTHER}"), min_size=1, max_size=3))
 def test_expand_env_substitutes_each_reference_once(parts, vals):
     names = sorted({p[1] for p in parts if isinstance(p, tuple)})
     variables = {n: vals[i % len(vals)] for i, n in enumerate(names)}

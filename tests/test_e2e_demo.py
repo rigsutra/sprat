@@ -24,8 +24,8 @@ import pytest
 import uvicorn
 import yaml
 
-from apitest.cli import main
-from apitest.models import sev_rank
+from sprat.cli import main
+from sprat.models import sev_rank
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO_FILE = ROOT / "examples" / "demo_api.py"
@@ -102,7 +102,7 @@ def demo():
 
 @pytest.fixture(scope="module")
 def demo_short_ttl():
-    """Tokens live 34 s; apitest renews 30 s before expiry, so a new login every ~4 s."""
+    """Tokens live 34 s; sprat renews 30 s before expiry, so a new login every ~4 s."""
     mod = load_demo("_e2e_demo_api_short_ttl", ttl=34)
     with LiveServer(mod.app) as srv:
         srv.module = mod
@@ -297,7 +297,7 @@ def test_config_file_with_automatic_login_and_token_refresh(demo_short_ttl, work
     assert all(s["status"] == "ok" for s in report["stages"]), report["stages"]
     assert rc == 1 == expected_exit(report)  # findings, not a login error (2)
     assert "Logged in as user A (login #1)" in stdout and "Logged in as user B (login #1)" in stdout
-    # the run outlived the first tokens: apitest logged in again by itself
+    # the run outlived the first tokens: sprat logged in again by itself
     logins = srv.logins() - before
     assert took > 8 and logins > 3, (took, logins)  # 2 initial logins + Schemathesis' own + renewals
     assert "(login #2)" in stdout
@@ -333,10 +333,10 @@ def test_config_file_login_with_wrong_password_fails_cleanly(demo, workdir, monk
 @pytest.fixture
 def web_client(workdir, monkeypatch):
     from fastapi.testclient import TestClient
-    from apitest.web import app as web
+    from sprat.web import app as web
     monkeypatch.setattr(web, "DATA", web.DATA)
     monkeypatch.setattr(web, "_store", None)
-    monkeypatch.delenv("APITEST_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SPRAT_SECRET_KEY", raising=False)
     data = workdir / "data"
     web.configure(data)
     web._runs.clear(); web._cancels.clear(); web._secrets.clear()

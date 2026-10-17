@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from apitest import coverage
-from apitest.spec import Operation
-from apitest.testlog import TestLog
+from sprat import coverage
+from sprat.spec import Operation
+from sprat.testlog import TestLog
 
 ALL = ["lint", "conformance", "types", "authz", "zap"]
 OK = {s: {"status": "ok"} for s in ALL}

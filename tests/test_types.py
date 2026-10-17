@@ -1,8 +1,8 @@
 import httpx
 
-from apitest.config import Config
-from apitest.spec import Operation, Spec
-from apitest.stages import types as T
+from sprat.config import Config
+from sprat.spec import Operation, Spec
+from sprat.stages import types as T
 
 RAW = {
     "openapi": "3.0.1",

@@ -11,13 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from apitest.auth import LoginConfig, TokenProvider
-from apitest.config import Config
-from apitest.proc import Cancelled, Result, Tail
-from apitest.spec import Operation, Spec, filter_operations, load_spec
-from apitest.stages import conformance
-from apitest.stages.conformance import AUTH_HOOKS, SEVERITY_BY_CHECK, _Live, _split_checks, log_scenarios, scenario_cases
-from apitest.testlog import TestLog, iter_entries
+from sprat.auth import LoginConfig, TokenProvider
+from sprat.config import Config
+from sprat.proc import Cancelled, Result, Tail
+from sprat.spec import Operation, Spec, filter_operations, load_spec
+from sprat.stages import conformance
+from sprat.stages.conformance import AUTH_HOOKS, SEVERITY_BY_CHECK, _Live, _split_checks, log_scenarios, scenario_cases
+from sprat.testlog import TestLog, iter_entries
 
 BASE = "http://api.test"
 SPEC_TEXT = '{"openapi": "3.0.1", "paths": {}}'
@@ -657,15 +657,15 @@ def test_headers_and_exclusions(st, tmp_path):
 
 def test_environment(st, tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONIOENCODING", "utf-8:surrogateescape")
-    monkeypatch.setenv("APITEST_SOMETHING", "kept")
+    monkeypatch.setenv("SPRAT_SOMETHING", "kept")
     fake = st(junit=JUNIT_OK)
     conformance.run(spec_of(), cfg_of(), tmp_path)
     env = fake.env
     assert env["PYTHONIOENCODING"] == "utf-8" and env["PYTHONUTF8"] == "1"
     assert env["REQUESTS_CA_BUNDLE"] == "C:/ca/bundle.pem"
-    assert env["APITEST_SOMETHING"] == "kept"
-    assert "SCHEMATHESIS_HOOKS" not in env and "APITEST_LOGIN_A" not in env
-    assert not (tmp_path / "apitest_auth_hooks.py").exists()
+    assert env["SPRAT_SOMETHING"] == "kept"
+    assert "SCHEMATHESIS_HOOKS" not in env and "SPRAT_LOGIN_A" not in env
+    assert not (tmp_path / "sprat_auth_hooks.py").exists()
 
 
 def test_automatic_login_goes_through_a_hooks_file(st, tmp_path):
@@ -674,10 +674,10 @@ def test_automatic_login_goes_through_a_hooks_file(st, tmp_path):
     cfg.auth_a = TokenProvider(login, variables={"PW": "s3cret-pass"})
     fake = st(junit=JUNIT_OK)
     conformance.run(spec_of(), cfg, tmp_path)
-    hooks = tmp_path / "apitest_auth_hooks.py"
+    hooks = tmp_path / "sprat_auth_hooks.py"
     assert fake.env["SCHEMATHESIS_HOOKS"] == str(hooks)
     assert hooks.read_text(encoding="utf-8") == AUTH_HOOKS
-    login_env = json.loads(fake.env["APITEST_LOGIN_A"])
+    login_env = json.loads(fake.env["SPRAT_LOGIN_A"])
     assert login_env["url"] == "http://auth.test/login"
     assert json.loads(login_env["body"]) == {"email": "a@x", "password": "s3cret-pass"}
     for f in tmp_path.rglob("*"):  # the secret lives only in the subprocess environment
@@ -687,7 +687,7 @@ def test_automatic_login_goes_through_a_hooks_file(st, tmp_path):
 
 
 def test_auth_hooks_source_is_valid_python():
-    compile(AUTH_HOOKS, "apitest_auth_hooks.py", "exec")
+    compile(AUTH_HOOKS, "sprat_auth_hooks.py", "exec")
     assert "retry_on=[]" in AUTH_HOOKS and "refresh_interval=None" in AUTH_HOOKS
 
 

@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apitest.web import app as web
+from sprat.web import app as web
 
 SPEC = {
     "openapi": "3.0.1", "info": {"title": "Fake", "version": "1"},
@@ -61,7 +61,7 @@ def client(tmp_path, monkeypatch):
 
 def _create(client, **extra):
     body = {"name": "Fake API", "spec": "http://fake.test/openapi.json", "stages": ["authz"],
-            "headers": "Authorization: Bearer literal-secret\nX-Env: ${APITEST_TEST_VAR}"} | extra
+            "headers": "Authorization: Bearer literal-secret\nX-Env: ${SPRAT_TEST_VAR}"} | extra
     r = client.post("/api/projects", json=body)
     assert r.status_code == 200, r.text
     return r.json()["id"]
@@ -84,10 +84,10 @@ def test_discover_finds_spec_from_root(client):
 
 
 def test_project_crud_and_secret_handling(client, tmp_path, monkeypatch):
-    monkeypatch.setenv("APITEST_TEST_VAR", "from-env")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "from-env")
     pid = _create(client)
     saved = (tmp_path / "projects" / f"{pid}.json").read_text()
-    assert "literal-secret" not in saved and "${APITEST_TEST_VAR}" in saved  # literal token never on disk
+    assert "literal-secret" not in saved and "${SPRAT_TEST_VAR}" in saved  # literal token never on disk
     p = client.get(f"/api/projects/{pid}").json()
     assert "literal-secret" in p["headers"] and len(p["operations"]) == 3
     assert [x["id"] for x in client.get("/api/projects").json()] == [pid]
@@ -98,7 +98,7 @@ def test_project_crud_and_secret_handling(client, tmp_path, monkeypatch):
 
 
 def test_run_selected_operations_and_per_api_status(client, monkeypatch):
-    monkeypatch.setenv("APITEST_TEST_VAR", "x")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "x")
     pid = _create(client)
     rid = client.post(f"/api/projects/{pid}/runs", json={"operations": ["GET /b"]}).json()["id"]
     run = _wait(client, rid)
@@ -111,7 +111,7 @@ def test_run_selected_operations_and_per_api_status(client, monkeypatch):
 
 
 def test_live_activity_feed_and_excluded_apis(client, monkeypatch):
-    monkeypatch.setenv("APITEST_TEST_VAR", "x")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "x")
     pid = _create(client, exclude_paths=["^/slow$"])
     ops = {o["label"]: o["excluded"] for o in client.get(f"/api/projects/{pid}").json()["operations"]}
     assert ops == {"GET /a": False, "GET /b": False, "GET /slow": True}
@@ -129,7 +129,7 @@ def test_live_activity_feed_and_excluded_apis(client, monkeypatch):
 
 def test_test_log_browse_filter_and_download(client, monkeypatch):
     import csv, io, json, zipfile
-    monkeypatch.setenv("APITEST_TEST_VAR", "env-secret-value")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "env-secret-value")
     pid = _create(client)
     rid = _wait(client, client.post(f"/api/projects/{pid}/runs", json={}).json()["id"])["id"]
     log = client.get(f"/api/runs/{rid}/log").json()
@@ -158,14 +158,14 @@ def test_test_log_browse_filter_and_download(client, monkeypatch):
     assert public[0]["request"]["headers"]["authorization"] == "Bearer ***"
 
 
-LOGIN = {"url": "http://fake.test/auth/login", "body": '{"email": "qa@x.test", "password": "${APITEST_PW}"}',
+LOGIN = {"url": "http://fake.test/auth/login", "body": '{"email": "qa@x.test", "password": "${SPRAT_PW}"}',
          "token_path": "data.accessToken"}
 
 
 def test_automatic_login(client, monkeypatch, tmp_path):
     import json as _j
     LOGINS.clear()
-    monkeypatch.setenv("APITEST_PW", "pw-from-env")
+    monkeypatch.setenv("SPRAT_PW", "pw-from-env")
     # a literal password is refused, with a message saying how to do it instead
     bad = {**LOGIN, "body": '{"email": "qa@x.test", "password": "hunter2"}'}
     r = client.post("/api/projects", json={"name": "L", "spec": "http://fake.test/openapi.json", "login_a": bad})
@@ -178,7 +178,7 @@ def test_automatic_login(client, monkeypatch, tmp_path):
     pid = client.post("/api/projects", json={"name": "L", "spec": "http://fake.test/openapi.json",
                                              "stages": ["authz"], "login_a": LOGIN}).json()["id"]
     saved = (tmp_path / "projects" / f"{pid}.json").read_text()
-    assert "pw-from-env" not in saved and "${APITEST_PW}" in saved
+    assert "pw-from-env" not in saved and "${SPRAT_PW}" in saved
     run = _wait(client, client.post(f"/api/projects/{pid}/runs", json={}).json()["id"])
     assert run["status"] == "done" and LOGINS  # logged in
     assert any(f["stage"] == "auth" and "Logged in as user A" in f["msg"] for f in run["feed"])
@@ -187,21 +187,21 @@ def test_automatic_login(client, monkeypatch, tmp_path):
     full = client.get(f"/api/runs/{run['id']}/log/{pub[0]['seq']}").json()
     assert full["request"]["headers"]["authorization"] == "Bearer ***"
     # wrong password: the run doesn't start, the error says why
-    monkeypatch.setenv("APITEST_PW", "wrong")
+    monkeypatch.setenv("SPRAT_PW", "wrong")
     r = client.post(f"/api/projects/{pid}/runs", json={})
     assert r.status_code == 400 and "Invalid email or password" in r.text and "nothing was tested" in r.text
 
 
 def test_missing_env_var_is_a_clear_error(client, monkeypatch):
-    monkeypatch.setenv("APITEST_TEST_VAR", "x")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "x")
     pid = _create(client)
-    monkeypatch.delenv("APITEST_TEST_VAR")
+    monkeypatch.delenv("SPRAT_TEST_VAR")
     r = client.post(f"/api/projects/{pid}/runs", json={})
-    assert r.status_code == 400 and "APITEST_TEST_VAR" in r.text
+    assert r.status_code == 400 and "SPRAT_TEST_VAR" in r.text
 
 
 def test_stop_cancels_run(client, monkeypatch):
-    monkeypatch.setenv("APITEST_TEST_VAR", "x")
+    monkeypatch.setenv("SPRAT_TEST_VAR", "x")
     # many slow operations so the run is still going when we stop it
     SPEC["paths"].update({f"/slow{i}": {"get": {"responses": {"200": {"description": "ok"}}}} for i in range(40)})
     try:

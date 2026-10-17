@@ -5,11 +5,11 @@ import time
 
 import pytest
 
-from apitest.discover import from_ui_text, parse_spec
-from apitest.models import Finding, StageResult
-from apitest.proc import Cancelled, run_cmd
-from apitest.runner import annotate
-from apitest.spec import filter_operations, load_spec
+from sprat.discover import from_ui_text, parse_spec
+from sprat.models import Finding, StageResult
+from sprat.proc import Cancelled, run_cmd
+from sprat.runner import annotate
+from sprat.spec import filter_operations, load_spec
 
 DOC = {
     "openapi": "3.0.1", "info": {"title": "Shop", "version": "1"},
@@ -82,8 +82,8 @@ def test_annotate_maps_every_finding_style(tmp_path):
 
 
 def test_exclude_paths_apply_to_every_stage(tmp_path, monkeypatch):
-    from apitest.config import Config
-    from apitest import runner
+    from sprat.config import Config
+    from sprat import runner
     f = tmp_path / "s.json"
     f.write_text(json.dumps(DOC))
     seen = {}

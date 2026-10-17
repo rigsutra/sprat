@@ -4,10 +4,10 @@ import re
 
 import pytest
 
-from apitest import htmlreport
-from apitest.explain import FINDING_TITLES, PHASES, STAGES
-from apitest.models import SEVERITIES
-from apitest.testlog import TestLog
+from sprat import htmlreport
+from sprat.explain import FINDING_TITLES, PHASES, STAGES
+from sprat.models import SEVERITIES
+from sprat.testlog import TestLog
 
 HOSTILE = '</script><script>alert(1)</script><img src=x onerror=alert(2)>'
 
@@ -39,7 +39,7 @@ def _build(tmp_path, meta=None, cov=None, report=None, entries=()):
 def test_empty_run_still_renders(tmp_path):
     out, text, d = _build(tmp_path)
     assert out == tmp_path / "test-report.html"
-    assert text.startswith("<!doctype html>") and "<title>API test report — apitest</title>" in text
+    assert text.startswith("<!doctype html>") and "<title>API test report — sprat</title>" in text
     assert "__DATA__" not in text and "__TITLE__" not in text
     assert d["apis"] == [] and d["warnings"] == [] and d["tests"] == {} and d["findings"] == {}
     assert d["run"]["id"] == tmp_path.name and d["run"]["project"] == "" and d["run"]["stages"] == {}

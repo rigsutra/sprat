@@ -1,4 +1,4 @@
-# apitest
+# SPRAT — Spec Probing, Robustness & Attack Testing
 
 Point it at a Swagger/OpenAPI URL and it tests the API end to end. The backend
 language doesn't matter (.NET, Express, anything) — everything goes through the
@@ -40,7 +40,7 @@ Optional: Node.js for `lint`, and Docker Desktop running for `zap`.
 ## Web UI
 
 ```
-apitest ui
+sprat ui
 ```
 
 Then open http://localhost:8787.
@@ -54,7 +54,7 @@ result, and each card has **Run all APIs** and **Stop** buttons.
 ### New project → Discover
 
 Enter the running app's URL (the root, the Swagger UI page, or the spec JSON).
-apitest finds the Swagger/OpenAPI document(s) and lists every API before you save.
+sprat finds the Swagger/OpenAPI document(s) and lists every API before you save.
 For a root URL it probes the usual locations: `/swagger/v1/swagger.json` (ASP.NET
 Core), `/openapi/v1.json` (.NET 9), `/api-docs` (swagger-ui-express, including specs
 embedded in the page), `/openapi.json`, `/v3/api-docs` and more.
@@ -62,7 +62,7 @@ embedded in the page), `/openapi.json`, `/v3/api-docs` and more.
 The same works on the CLI:
 
 ```
-apitest discover https://orders-staging.example.com
+sprat discover https://orders-staging.example.com
 ```
 
 ### Inside a project
@@ -73,7 +73,7 @@ apitest discover https://orders-staging.example.com
 - **Runs** tab — history.
 - **Settings** tab — everything from the new-project form.
 - **Export CLI config** — gives the YAML for CI. Selecting APIs works there too:
-  `apitest run --config x.yaml --op "GET /orders/{id}"`.
+  `sprat run --config x.yaml --op "GET /orders/{id}"`.
 
 ### Live activity
 
@@ -105,7 +105,7 @@ entry has a plain-language `explanation`.
 ### Automatic login
 
 Settings → Test users → *Log in automatically*. Instead of pasting a token that
-expires, give apitest the login API and it fetches tokens itself:
+expires, give sprat the login API and it fetches tokens itself:
 
 1. **Login API URL** and method, and the **request body**, with the password written
    as a name: `{"email": "qa@example.com", "password": "${QA_PASSWORD}"}`. Literal
@@ -120,33 +120,33 @@ expires, give apitest the login API and it fetches tokens itself:
    cookie.
 4. **Token expires** — automatically from the JWT's `exp` (the usual case), from a
    response field (e.g. `data.expiresIn`), or after a fixed number of minutes.
-5. **Test login** shows when the token expires and when apitest would renew it.
+5. **Test login** shows when the token expires and when sprat would renew it.
 
-During a run apitest logs in at the start and fetches a new token **30 seconds
+During a run sprat logs in at the start and fetches a new token **30 seconds
 before the current one expires**: in its own tests, and inside Schemathesis (through
 a generated hooks file). ZAP gets the token through its replacer rules; during the
-scan apitest logs in again 90 seconds before expiry and swaps the rule through ZAP's
+scan sprat logs in again 90 seconds before expiry and swaps the rule through ZAP's
 API (published on 127.0.0.1 only), so long scans don't end in 401s. Wrong credentials stop the run before anything is
 tested, with the login API's error message. User A and user B each have their own
 login. In a CLI config this is `login_a:` / `login_b:` (see
 `examples/demo-login.yaml`); the CLI has no secret store, so there `${NAME}` comes
 from environment variables.
 
-**The encryption key.** By default apitest creates `reports/.secret.key` on first
+**The encryption key.** By default sprat creates `reports/.secret.key` on first
 use. Anyone who can read both that file and `secrets.json` can decrypt the secrets,
-so **on a shared server set `APITEST_SECRET_KEY`** (a long passphrase) in the
+so **on a shared server set `SPRAT_SECRET_KEY`** (a long passphrase) in the
 server's environment instead, and keep it out of the data folder. If the key
 changes, saved secrets can't be decrypted and must be entered again. Back up the key
 together with `secrets.json`.
 
 **No token, no silent run.** If APIs in the run need login and no token is set for
 user A, the UI asks before starting (Open Settings / Run anyway). Tokens typed into
-Settings are forgotten when the apitest server restarts; use `${ENV_VAR}` references
+Settings are forgotten when the sprat server restarts; use `${ENV_VAR}` references
 to keep them.
 
 ### Test log
 
-Every test apitest performs is recorded: one entry per request, with the stage, the
+Every test sprat performs is recorded: one entry per request, with the stage, the
 API, the scenario tested ("Boundary values and wrong types: Missing `Authorization`
 at header", "Field `price` (declared number) set to numeric string \"1.5\"", "BOLA
 step 2: user B requests user A's resource"), what a correct API should do, the
@@ -183,7 +183,7 @@ What each stage logs:
   the project card. The current tool is killed (including its child processes, and
   the ZAP container) and partial results from the stages that finished are kept.
 - **Tokens** — a header line like `Authorization: Bearer ${ORDERS_TOKEN_A}` is saved
-  with the project, and the variable is read from the apitest server's environment
+  with the project, and the variable is read from the sprat server's environment
   when a run starts. The CLI supports `${VAR}` too. A literal token is held in
   server memory only, never written to disk, and must be re-entered after the
   server restarts. Run files show header values as `***`.
@@ -195,7 +195,7 @@ What each stage logs:
 
 ### Wrong-type probing (`types`)
 
-For each POST/PUT/PATCH with a JSON body, apitest first sends a **valid baseline**
+For each POST/PUT/PATCH with a JSON body, sprat first sends a **valid baseline**
 body (the spec's `example`, else one generated from the schema). Only if that
 returns 2xx does it swap each field to each wrong type. Otherwise a rejection could
 be for any reason, and the operation is reported as "skipped: baseline rejected". To
@@ -211,13 +211,13 @@ look-alike values. `types` names the exact field and type.
 Quick, from flags only:
 
 ```
-apitest run https://staging.example.com/swagger/v1/swagger.json -H "Authorization: Bearer <token>"
+sprat run https://staging.example.com/swagger/v1/swagger.json -H "Authorization: Bearer <token>"
 ```
 
 With a config file (recommended; see `examples/demo.yaml`):
 
 ```
-apitest run --config myapi.yaml
+sprat run --config myapi.yaml
 ```
 
 Useful flags: `--base-url` (when the spec has no usable server/host),
@@ -267,13 +267,13 @@ The tester checks that A gets 2xx, then replays as B and flags any 2xx.
 
 ## HTTPS certificates
 
-apitest trusts Python's certificate list **plus the Windows certificate store**, so
+sprat trusts Python's certificate list **plus the Windows certificate store**, so
 it works on machines where an antivirus web shield (Norton, Avast...) or a company
 proxy re-signs HTTPS, or where servers use an internal CA that Windows trusts.
 Discovery, login, every test stage and Schemathesis all use the same list.
 Verification is never turned off: an expired or wrong certificate is still
 rejected. To trust one more CA (for example on Linux CI), export it as PEM and set
-`APITEST_CA_BUNDLE` to the file.
+`SPRAT_CA_BUNDLE` to the file.
 
 ## Safety
 
@@ -287,7 +287,7 @@ accounts for the tokens.
 
 ```
 uvicorn examples.demo_api:app --port 8000
-apitest run --config examples/demo.yaml
+sprat run --config examples/demo.yaml
 ```
 
 ## Tests

@@ -12,7 +12,7 @@ const GUIDE_HTML = `<div class="guide">
   </div>
 
   <h4><span class="step-n">1</span> Fix your Swagger first</h4>
-  <p>apitest only knows what your Swagger says. A vague spec gives false findings and misses real bugs.
+  <p>sprat only knows what your Swagger says. A vague spec gives false findings and misses real bugs.
     Download the guides and give them to your developers or your AI assistant.</p>
   <div class="downloads">
     <a class="dl" href="/guides/SWAGGER_GUIDE.md" download><b>Swagger guide</b><span>What to put in the spec, with ASP.NET Core and Express examples, and a checklist</span><u>Download .md</u></a>
@@ -111,7 +111,7 @@ async function showGuide() {
   const d = document.getElementById("dialog");
   d.classList.add("guide");
   d.addEventListener("close", () => d.classList.remove("guide"), { once: true });
-  const closed = dialog("How to use apitest", GUIDE_HTML, [{ label: "Close", cls: "primary", value: true }]);
+  const closed = dialog("How to use sprat", GUIDE_HTML, [{ label: "Close", cls: "primary", value: true }]);
   // showModal() focuses the first link (the first download card); start at the top with nothing selected
   document.activeElement?.blur();
   document.getElementById("dialogBody").scrollTop = 0;

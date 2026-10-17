@@ -18,19 +18,19 @@ steps:
   - task: NodeTool@0
     inputs: { versionSpec: "20.x" }
   - script: pip install -e .
-    displayName: Install apitest
+    displayName: Install sprat
   - script: >
-      apitest run "$(SPEC_URL)"
+      sprat run "$(SPEC_URL)"
       -H "Authorization: Bearer $(API_TOKEN_A)"
       --header-b "Authorization: Bearer $(API_TOKEN_B)"
-      --out $(Build.ArtifactStagingDirectory)/apitest
+      --out $(Build.ArtifactStagingDirectory)/sprat
     displayName: Run API tests
   - task: PublishTestResults@2
     condition: always()
     inputs:
-      testResultsFiles: $(Build.ArtifactStagingDirectory)/apitest/schemathesis-junit.xml
+      testResultsFiles: $(Build.ArtifactStagingDirectory)/sprat/schemathesis-junit.xml
   - task: PublishBuildArtifacts@1
     condition: always()
     inputs:
-      PathtoPublish: $(Build.ArtifactStagingDirectory)/apitest
-      ArtifactName: apitest-report
+      PathtoPublish: $(Build.ArtifactStagingDirectory)/sprat
+      ArtifactName: sprat-report

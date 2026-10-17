@@ -1,9 +1,9 @@
 """Live progress parsing for ZAP and Schemathesis."""
 import json
 
-from apitest.config import Config
-from apitest.stages import zap
-from apitest.stages.conformance import _Live
+from sprat.config import Config
+from sprat.stages import zap
+from sprat.stages.conformance import _Live
 
 ZAP_LOG = """2026-10-02 10:35:35,757 Starting ZAP
 2026-10-02 10:35:48,058 Starting new HTTP connection (1): localhost:43174

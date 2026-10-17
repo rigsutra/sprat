@@ -1,6 +1,6 @@
-# Writing Swagger / OpenAPI specs that apitest can test well
+# Writing Swagger / OpenAPI specs that sprat can test well
 
-apitest knows only what your spec tells it. A precise spec lets it find real bugs. A vague
+sprat knows only what your spec tells it. A precise spec lets it find real bugs. A vague
 spec produces two kinds of failure: **noise** (false findings) and **blind spots** (bugs it never
 looks for). This guide covers what to put in the spec, why each part matters, and how to do it in
 ASP.NET Core and Express.
@@ -10,11 +10,11 @@ cleanly.
 
 ---
 
-## 1. How apitest uses your spec
+## 1. How sprat uses your spec
 
 | Spec element | Used by | If it's missing or wrong |
 |---|---|---|
-| `servers` | every stage | apitest can't find the API; you must pass `--base-url` |
+| `servers` | every stage | sprat can't find the API; you must pass `--base-url` |
 | `security` per operation | `authz`, `conformance` | Protected endpoints are never checked for missing auth, **or** public endpoints are reported as "critical: accepts no credentials" |
 | Response schemas | `conformance` | Type errors in responses go undetected |
 | Every status code an endpoint returns | `conformance` | Every 400/401/404 is reported as "Undocumented HTTP status code" |
@@ -26,7 +26,7 @@ cleanly.
 
 **The rule underneath all of these: the spec must describe what the server actually does,
 not what you wish it did.** If the server returns 404, document 404. If it accepts a field up to
-200 characters, put `maxLength: 200`. A mismatch in either direction is what apitest reports.
+200 characters, put `maxLength: 200`. A mismatch in either direction is what sprat reports.
 
 ---
 
@@ -44,7 +44,7 @@ servers:
 
 ### 2.2 Security: mark protected and public endpoints explicitly
 
-This is the most important section for security testing. apitest sends **no token** and a
+This is the most important section for security testing. sprat sends **no token** and a
 **fake token** to every operation marked as secured, and expects 401/403.
 
 ```yaml
@@ -63,7 +63,7 @@ paths:
       security: [ {}, { bearerAuth: [] } ]   # auth optional (anonymous allowed, more data when logged in)
 ```
 
-| You write | apitest treats it as |
+| You write | sprat treats it as |
 |---|---|
 | `security: [ { bearerAuth: [] } ]` (operation or global) | Secured: must reject no token or a fake token |
 | `security: []` on the operation | Public: auth checks skipped |
@@ -88,7 +88,7 @@ responses:
   "404": { description: Order not found, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
 ```
 
-- Don't document `500`. A 500 is always a bug and apitest reports it as one.
+- Don't document `500`. A 500 is always a bug and sprat reports it as one.
 - Avoid `default:` as a catch-all for everything; it hides undocumented statuses.
 - Use one shared error schema (RFC 7807 Problem Details) for every error.
 
@@ -155,7 +155,7 @@ parameters:
     schema: { type: integer, minimum: 1, default: 1 }
 ```
 
-Give every path parameter a type and `format`. apitest uses them to build probe URLs: a uuid
+Give every path parameter a type and `format`. sprat uses them to build probe URLs: a uuid
 parameter gets a uuid, not `1`.
 
 ### 2.7 Examples for important values
@@ -171,7 +171,7 @@ or at the operation level with `examples:` under the media type. Examples are se
 Schemathesis's examples phase, so **examples must be valid** against their own schema (`lint`
 checks this).
 
-### 2.8 Links: let apitest chain requests
+### 2.8 Links: let sprat chain requests
 
 Without links, every request uses random IDs, so most `GET /orders/{id}` calls return 404.
 Links tell the tester to take the ID from a create response and use it in later calls:
@@ -204,7 +204,7 @@ Add links for your main resources at least.
 ### 2.10 What a spec can't describe
 
 **Ownership.** The spec can say an endpoint needs a token, but not that the order must belong
-to that token's user. Configure cross-user (BOLA) checks in the apitest config:
+to that token's user. Configure cross-user (BOLA) checks in the sprat config:
 
 ```yaml
 bola:
@@ -248,7 +248,7 @@ optional fields as `string?`, otherwise nullability in the spec will be wrong.
 
 ### 3.2 Per-endpoint security (don't use a global `AddSecurityRequirement`)
 
-A global requirement marks `[AllowAnonymous]` endpoints as secured, and apitest will flag them.
+A global requirement marks `[AllowAnonymous]` endpoints as secured, and sprat will flag them.
 Use a filter that reads the real authorization metadata:
 
 ```csharp
@@ -393,8 +393,8 @@ app.get("/swagger.json", (_req, res) =>
 - Express returns its own HTML 404 and 500 pages by default. Add a JSON error handler, and
   document the JSON error shape.
 - Don't leak stack traces: in the error handler, never send `err.stack` outside development.
-  apitest reports stack traces in responses.
-- Set `helmet()`: it adds `X-Content-Type-Options` and other headers apitest checks for.
+  sprat reports stack traces in responses.
+- Set `helmet()`: it adds `X-Content-Type-Options` and other headers sprat checks for.
 - Validate `req.params` and `req.query`, not only the body. Express gives you strings, so
   `/orders/abc` must return 400, not 500.
 - **Unsupported methods must return 405, not 404.** If `/orders` only has GET, then `DELETE /orders`
@@ -436,7 +436,7 @@ app.get("/swagger.json", (_req, res) =>
 
 ## 5. Checklist
 
-Every item below maps to a check apitest runs.
+Every item below maps to a check sprat runs.
 
 - [ ] OpenAPI 3.0/3.1, served at a stable URL in each environment, with `servers` set
 - [ ] Security scheme defined; every operation is explicitly secured, public (`security: []`) or optional
@@ -451,9 +451,9 @@ Every item below maps to a check apitest runs.
 - [ ] Unique camelCase `operationId`, plus `summary` and `tags`, on every operation
 - [ ] `links` from create operations to read/update/delete of the same resource
 - [ ] Examples for boundary values, and they validate against their schema
-- [ ] Two staging test users plus BOLA entries in the apitest config
+- [ ] Two staging test users plus BOLA entries in the sprat config
 
-## 6. What each apitest finding usually means
+## 6. What each sprat finding usually means
 
 | Finding | Usual fix |
 |---|---|

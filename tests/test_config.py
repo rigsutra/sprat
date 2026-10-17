@@ -4,7 +4,7 @@ import threading
 import pytest
 import yaml
 
-from apitest.config import ALL_STAGES, Config, expand_env, load_config, parse_header
+from sprat.config import ALL_STAGES, Config, expand_env, load_config, parse_header
 
 
 # ---------- Config ----------
@@ -80,11 +80,11 @@ def test_expand_env_values_are_not_reexpanded_or_regex_processed(monkeypatch):
 
 
 def test_expand_env_missing_raises_with_name(monkeypatch):
-    monkeypatch.delenv("APITEST_SURELY_MISSING", raising=False)
-    with pytest.raises(ValueError, match="APITEST_SURELY_MISSING has no value"):
-        expand_env("x ${APITEST_SURELY_MISSING} y")
+    monkeypatch.delenv("SPRAT_SURELY_MISSING", raising=False)
+    with pytest.raises(ValueError, match="SPRAT_SURELY_MISSING has no value"):
+        expand_env("x ${SPRAT_SURELY_MISSING} y")
     with pytest.raises(ValueError, match="environment variable"):
-        expand_env("${APITEST_SURELY_MISSING}", {"OTHER": "1"})
+        expand_env("${SPRAT_SURELY_MISSING}", {"OTHER": "1"})
 
 
 # ---------- parse_header ----------
@@ -177,9 +177,9 @@ def test_load_config_null_headers_become_empty(tmp_path, key):
 
 
 def test_load_config_missing_env_in_headers_raises(tmp_path, monkeypatch):
-    monkeypatch.delenv("APITEST_NOPE_XYZ", raising=False)
-    with pytest.raises(ValueError, match="APITEST_NOPE_XYZ"):
-        load_config(_yaml(tmp_path, "headers_b: {A: '${APITEST_NOPE_XYZ}'}\n"))
+    monkeypatch.delenv("SPRAT_NOPE_XYZ", raising=False)
+    with pytest.raises(ValueError, match="SPRAT_NOPE_XYZ"):
+        load_config(_yaml(tmp_path, "headers_b: {A: '${SPRAT_NOPE_XYZ}'}\n"))
 
 
 @pytest.mark.parametrize("key", ["bogus", "Spec", "cancel", "on_progress", "testlog", "auth_a", "auth_b",

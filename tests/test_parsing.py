@@ -1,7 +1,7 @@
 import json
 
-from apitest.spec import load_spec
-from apitest.stages.conformance import _split_checks
+from sprat.spec import load_spec
+from sprat.stages.conformance import _split_checks
 
 JUNIT_TEXT = """1. Test Case ID: Dh8wxe
 

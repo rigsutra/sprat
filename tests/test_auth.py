@@ -5,7 +5,7 @@ import time
 import httpx
 import pytest
 
-from apitest.auth import LoginConfig, LoginError, TokenProvider, get_path, jwt_claims, leaf_paths, literal_secrets
+from sprat.auth import LoginConfig, LoginError, TokenProvider, get_path, jwt_claims, leaf_paths, literal_secrets
 
 SAMPLE = {"success": True, "data": {"user": {"id": "u1"}, "accessToken": "", "expiresIn": 900}, "error": None}
 
@@ -34,7 +34,7 @@ class FakeLogin:
 @pytest.fixture
 def server(monkeypatch):
     srv = FakeLogin()
-    import apitest.auth as auth_mod
+    import sprat.auth as auth_mod
 
     def fake_http(method, url, timeout, **kw):
         with httpx.Client(transport=httpx.MockTransport(srv)) as c:

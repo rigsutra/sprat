@@ -1,17 +1,17 @@
-# What apitest tests at each stage
+# What sprat tests at each stage
 
-apitest runs up to five stages, in this order. Each stage can be switched on or off per run
+sprat runs up to five stages, in this order. Each stage can be switched on or off per run
 (`--stages` on the CLI, checkboxes in the web UI).
 
 | # | Stage (name in the report) | Question it answers | Tool | Sends requests? |
 |---|---|---|---|---|
 | 1 | `lint` (Swagger quality) | Is the Swagger document itself well written? | Spectral | No |
 | 2 | `conformance` (Behaviour vs Swagger) | Does the API behave the way the Swagger says? | Schemathesis | Yes, many |
-| 3 | `types` (Wrong data types) | Does the API reject a value of the wrong type? | apitest's own code | Yes, POST/PUT/PATCH only |
-| 4 | `authz` (Access control) | Can someone get in without a valid login, or read another user's data? | apitest's own code | Yes |
+| 3 | `types` (Wrong data types) | Does the API reject a value of the wrong type? | sprat's own code | Yes, POST/PUT/PATCH only |
+| 4 | `authz` (Access control) | Can someone get in without a valid login, or read another user's data? | sprat's own code | Yes |
 | 5 | `zap` (Security scan) | Does the API have common web vulnerabilities? | OWASP ZAP (Docker) | Yes, attack payloads |
 
-Every request apitest sends is recorded in the test log (`test-log.ndjson` / `.csv`) and in the
+Every request sprat sends is recorded in the test log (`test-log.ndjson` / `.csv`) and in the
 HTML report (`test-report.html`). Each row shows the stage and phase it came from, so it can be
 matched to the sections below.
 
@@ -19,7 +19,7 @@ matched to the sections below.
 
 ## 1. `lint`: Swagger quality
 
-apitest reads only the Swagger file, so the API is never called. It uses Spectral's standard
+sprat reads only the Swagger file, so the API is never called. It uses Spectral's standard
 OpenAPI ruleset (`spectral:oas`), including:
 
 - The document is valid OpenAPI, with no broken `$ref`s and no duplicate `operationId`s.
@@ -61,7 +61,7 @@ Every response is checked against these test cases:
 | Use after delete | A deleted resource can still be fetched |
 | Created resource | A resource that was just created can't be found |
 
-If a request is blocked by 401/403 (missing token or permission), apitest marks it
+If a request is blocked by 401/403 (missing token or permission), sprat marks it
 **"Not really tested"** rather than passed. The report names the missing permission when the
 server says which one it is.
 
@@ -69,7 +69,7 @@ server says which one it is.
 
 This covers POST/PUT/PATCH APIs with a JSON body:
 
-1. apitest first sends a **valid request**, with every field the correct type. If the server
+1. sprat first sends a **valid request**, with every field the correct type. If the server
    refuses it, that API is skipped and the reason is shown, because any later rejection couldn't
    be blamed on the type.
 2. It then changes **one field at a time** and resends. Nested fields go 4 levels deep, up to 60
@@ -149,7 +149,7 @@ that test the login itself (no token, fake token) don't count.
 ### APIs that answer errors with HTTP 200
 
 Some APIs refuse a request but still answer HTTP 200, with the error in the body
-(`{"status": "Failed", "message": "..."}`, `{"success": false, ...}`). apitest reads the body: such a
+(`{"status": "Failed", "message": "..."}`, `{"success": false, ...}`). sprat reads the body: such a
 response counts as a refusal, so it isn't reported as "accepted the wrong type", "accepted invalid
 input" or "works without login", and it isn't counted as a write. Each such API gets one low
 finding instead: **Reports errors with HTTP 200 instead of 4xx**.
@@ -172,7 +172,7 @@ examples:
     path: {id: "12"}
 ```
 
-apitest writes them into its own copy of the Swagger before testing: the wrong-type stage starts
+sprat writes them into its own copy of the Swagger before testing: the wrong-type stage starts
 from them and the behaviour tests send them as examples. Swagger-quality checks still judge your
 original Swagger.
 

@@ -1,4 +1,4 @@
-"""Security regressions of apitest itself: it holds passwords and tokens and talks to APIs that may be
+"""Security regressions of sprat itself: it holds passwords and tokens and talks to APIs that may be
 hostile. Secrets must not end up on disk, on the console or in error messages; the web UI must stay
 local and inside its data directory; content coming from the target API must not be able to inject
 markup into the reports; and a login must not hand credentials to another host via a redirect.
@@ -26,9 +26,9 @@ import pytest
 import uvicorn
 import yaml
 
-from apitest import cli
-from apitest.auth import LoginConfig, LoginError, TokenProvider, literal_secrets
-from apitest.spec import load_spec
+from sprat import cli
+from sprat.auth import LoginConfig, LoginError, TokenProvider, literal_secrets
+from sprat.spec import load_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO_FILE = ROOT / "examples" / "demo_api.py"
@@ -97,11 +97,11 @@ def net(monkeypatch):
 @pytest.fixture
 def web_client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
-    from apitest.web import app as web
+    from sprat.web import app as web
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(web, "DATA", web.DATA)
     monkeypatch.setattr(web, "_store", None)
-    monkeypatch.delenv("APITEST_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SPRAT_SECRET_KEY", raising=False)
     data = tmp_path / "data"
     web.configure(data)
     web._runs.clear(); web._cancels.clear(); web._secrets.clear()
@@ -168,9 +168,9 @@ def secret_run(tmp_path_factory):
                    "login_a": login("alice", "DEMO_ALICE_PW"), "login_b": login("bob", "DEMO_BOB_PW"),
                    "max_examples": 3, "out_dir": str(root / "out"),
                    "bola": [{"method": "GET", "path": "/users/{uid}/orders/{oid}", "params": {"uid": 1, "oid": 10}}]}
-            (root / "apitest.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+            (root / "sprat.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
             with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
-                rc = cli.main(["run", "--config", str(root / "apitest.yaml"), "--stages", "conformance,types,authz"])
+                rc = cli.main(["run", "--config", str(root / "sprat.yaml"), "--stages", "conformance,types,authz"])
     finally:
         os.chdir(cwd)
         for k, v in env_before.items():
@@ -234,7 +234,7 @@ def test_tokens_and_keys_never_written_to_any_file(secret_run):
 # ---------------- 2. failed logins ----------------
 
 def _login_cfg(url="http://auth.test/login", **kw) -> LoginConfig:
-    return LoginConfig(url=url, body='{"email": "qa@x.test", "password": "${APITEST_SEC_PW}"}',
+    return LoginConfig(url=url, body='{"email": "qa@x.test", "password": "${SPRAT_SEC_PW}"}',
                        token_path="data.accessToken", **kw)
 
 
@@ -251,7 +251,7 @@ FAILED_LOGINS = {
 
 @pytest.mark.parametrize("case", list(FAILED_LOGINS))
 def test_failed_login_message_never_contains_the_password(case, net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = FAILED_LOGINS[case]
     with pytest.raises(LoginError) as e:
         TokenProvider(_login_cfg()).current_token()
@@ -261,7 +261,7 @@ def test_failed_login_message_never_contains_the_password(case, net, monkeypatch
 
 
 def test_failed_login_message_masks_password_echoed_in_server_message(net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = lambda r: httpx.Response(
         401, json={"message": f"Wrong password {json.loads(r.content)['password']}"})
     with pytest.raises(LoginError) as e:
@@ -271,11 +271,11 @@ def test_failed_login_message_masks_password_echoed_in_server_message(net, monke
 
 def test_failed_login_via_cli_prints_no_secret_and_writes_nothing(net, tmp_path, monkeypatch, capfd):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = FAILED_LOGINS["422-echo-in-input"]
     cfg = {"spec": "http://api.test/openapi.json", "out_dir": str(tmp_path / "out"),
            "login_a": {"url": "http://auth.test/login", "token_path": "data.accessToken",
-                       "body": '{"email": "qa@x.test", "password": "${APITEST_SEC_PW}"}'}}
+                       "body": '{"email": "qa@x.test", "password": "${SPRAT_SEC_PW}"}'}}
     (tmp_path / "c.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     assert cli.main(["run", "--config", str(tmp_path / "c.yaml"), "--stages", "authz"]) == 2
     o, e = capfd.readouterr()
@@ -328,7 +328,7 @@ def test_literal_password_in_login_url_is_refused(url):
 # ---------------- 4. the web UI stays local ----------------
 
 def test_web_ui_binds_loopback_by_default(tmp_path, monkeypatch, capsys):
-    from apitest.web import app as web
+    from sprat.web import app as web
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(web, "DATA", web.DATA)
     monkeypatch.setattr(web, "_store", None)
@@ -553,7 +553,7 @@ def _leaked_to(net: FakeNet, host: str, secrets: list[str]) -> list[str]:
 
 @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
 def test_login_redirect_to_other_host_gets_no_password(status, net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = _redirector(status, "http://evil.test/collect")
     net.hosts["evil.test"] = _attacker
     with pytest.raises(LoginError, match="redirected to evil.test.*isn't sent there"):
@@ -562,10 +562,10 @@ def test_login_redirect_to_other_host_gets_no_password(status, net, monkeypatch)
 
 
 def test_login_redirect_to_other_host_drops_authorization_header(net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_CREDS", "cWE6c2VjcmV0LWJhc2lj")
+    monkeypatch.setenv("SPRAT_SEC_CREDS", "cWE6c2VjcmV0LWJhc2lj")
     net.hosts["auth.test"] = _redirector(302, "http://evil.test/collect")
     net.hosts["evil.test"] = _attacker
-    cfg = _login_cfg(headers={"Authorization": "Basic ${APITEST_SEC_CREDS}"})
+    cfg = _login_cfg(headers={"Authorization": "Basic ${SPRAT_SEC_CREDS}"})
     cfg.body = ""
     try:
         TokenProvider(cfg).current_token()
@@ -576,10 +576,10 @@ def test_login_redirect_to_other_host_drops_authorization_header(net, monkeypatc
 
 
 def test_login_redirect_to_other_host_gets_no_custom_secret_header(net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_KEY", "key-SECRET-77")
+    monkeypatch.setenv("SPRAT_SEC_KEY", "key-SECRET-77")
     net.hosts["auth.test"] = _redirector(302, "http://evil.test/collect")
     net.hosts["evil.test"] = _attacker
-    cfg = _login_cfg(headers={"X-Api-Key": "${APITEST_SEC_KEY}"})
+    cfg = _login_cfg(headers={"X-Api-Key": "${SPRAT_SEC_KEY}"})
     cfg.body = ""
     try:
         TokenProvider(cfg).current_token()
@@ -589,7 +589,7 @@ def test_login_redirect_to_other_host_gets_no_custom_secret_header(net, monkeypa
 
 
 def test_login_redirect_on_same_host_still_works(net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = _redirector(307, "/v2/login")
     p = TokenProvider(_login_cfg())
     assert p.current_token().endswith(".signature") and p.expiry_source == "JWT exp claim"
@@ -634,12 +634,12 @@ def test_spec_redirect_on_same_host_keeps_the_api_key(net):
     ("http://127.0.0.1:8000/x", "http://localhost:8000/y", False),
 ])
 def test_same_site(a, b, ok):
-    from apitest.discover import same_site
+    from sprat.discover import same_site
     assert same_site(a, b) is ok
 
 
 def test_login_http_to_https_upgrade_is_followed(net, monkeypatch):
-    monkeypatch.setenv("APITEST_SEC_PW", PW)
+    monkeypatch.setenv("SPRAT_SEC_PW", PW)
     net.hosts["auth.test"] = lambda r: (httpx.Response(308, headers={"Location": "https://auth.test/login"})
                                         if r.url.scheme == "http" else _attacker(r))
     assert TokenProvider(_login_cfg()).current_token()

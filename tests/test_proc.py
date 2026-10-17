@@ -1,4 +1,4 @@
-"""apitest.proc: cancellable subprocess runner, live output tailing, progress/cancel helpers.
+"""sprat.proc: cancellable subprocess runner, live output tailing, progress/cancel helpers.
 
 Real child processes are started with `sys.executable -c ...` (Python is always available).
 """
@@ -13,9 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from apitest import proc
-from apitest.config import Config
-from apitest.proc import Cancelled, Result, Tail, check, progress, run_cmd
+from sprat import proc
+from sprat.config import Config
+from sprat.proc import Cancelled, Result, Tail, check, progress, run_cmd
 
 PY = sys.executable
 
@@ -142,14 +142,14 @@ def test_output_is_decoded_as_utf8_with_replacement():
 
 
 def test_env_is_passed_to_the_child():
-    env = {**os.environ, "APITEST_PROC_MARKER": "hello-42"}
-    r = run_cmd(py("import os; print(os.environ.get('APITEST_PROC_MARKER'))"), env=env)
+    env = {**os.environ, "SPRAT_PROC_MARKER": "hello-42"}
+    r = run_cmd(py("import os; print(os.environ.get('SPRAT_PROC_MARKER'))"), env=env)
     assert r.stdout.strip() == "hello-42"
 
 
 def test_env_none_inherits_the_parent_environment(monkeypatch):
-    monkeypatch.setenv("APITEST_PROC_INHERIT", "yes")
-    assert run_cmd(py("import os; print(os.environ['APITEST_PROC_INHERIT'])")).stdout.strip() == "yes"
+    monkeypatch.setenv("SPRAT_PROC_INHERIT", "yes")
+    assert run_cmd(py("import os; print(os.environ['SPRAT_PROC_INHERIT'])")).stdout.strip() == "yes"
 
 
 def test_stdin_is_closed_so_prompts_cannot_hang():
@@ -178,7 +178,7 @@ def test_large_output_does_not_deadlock():
 
 def test_missing_executable_raises_and_cleans_up(private_tmp):
     with pytest.raises(FileNotFoundError):
-        run_cmd(["definitely-not-a-real-tool-apitest"])
+        run_cmd(["definitely-not-a-real-tool-sprat"])
     assert list(private_tmp.iterdir()) == []
 
 

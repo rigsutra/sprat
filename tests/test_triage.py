@@ -1,6 +1,6 @@
 """Root causes, severities, recommended fixes, report priorities, lenient mode and per-API access status."""
-from apitest import coverage, triage
-from apitest.models import Finding, StageResult
+from sprat import coverage, triage
+from sprat.models import Finding, StageResult
 
 from test_coverage_report import A, ALL, _build, op
 

@@ -1,4 +1,4 @@
-"""Automatic login (apitest.auth): request building, token extraction, expiry, refresh, errors."""
+"""Automatic login (sprat.auth): request building, token extraction, expiry, refresh, errors."""
 import base64
 import json
 import re
@@ -12,9 +12,9 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-import apitest.auth as auth
-import apitest.discover as discover
-from apitest.auth import (DEFAULT_LIFETIME, LoginConfig, LoginError, TokenProvider, _to_epoch, current_headers,
+import sprat.auth as auth
+import sprat.discover as discover
+from sprat.auth import (DEFAULT_LIFETIME, LoginConfig, LoginError, TokenProvider, _to_epoch, current_headers,
                           get_path, has_user, jwt_claims, leaf_paths, literal_secrets, make_providers)
 
 PW = "s3cret-Pa55"
@@ -215,7 +215,7 @@ def test_redirect_loop_is_a_login_error(srv):
 
 
 def test_last_allowed_redirect_going_to_another_host_is_refused(srv):
-    from apitest.auth import MAX_REDIRECTS
+    from sprat.auth import MAX_REDIRECTS
 
     def respond(r):
         n = int(r.url.path.rsplit("/", 1)[-1] or 0) if r.url.path != "/login" else 0

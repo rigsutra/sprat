@@ -1,9 +1,9 @@
 """Plain-language explanations: every table entry, every branch, and the fallbacks."""
 import pytest
 
-from apitest import explain
-from apitest.config import ALL_STAGES
-from apitest.explain import (CHECKS, FINDING_TITLES, PHASES, STAGES, blocked_by_auth, describe_case, expected_for,
+from sprat import explain
+from sprat.config import ALL_STAGES
+from sprat.explain import (CHECKS, FINDING_TITLES, PHASES, STAGES, blocked_by_auth, describe_case, expected_for,
                              explain_check, finding_title, is_auth_probe, is_method_probe, permission_detail,
                              phase_label, server_said)
 

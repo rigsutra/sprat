@@ -1,4 +1,4 @@
-"""Per-project secret store (apitest.secretstore): encryption at rest, key handling, storage edge cases."""
+"""Per-project secret store (sprat.secretstore): encryption at rest, key handling, storage edge cases."""
 import base64
 import hashlib
 import json
@@ -11,13 +11,13 @@ import time
 import pytest
 from cryptography.fernet import Fernet
 
-import apitest.secretstore as ss
-from apitest.secretstore import SecretStore, check_name
+import sprat.secretstore as ss
+from sprat.secretstore import SecretStore, check_name
 
 
 @pytest.fixture(autouse=True)
 def no_env_key(monkeypatch):
-    monkeypatch.delenv("APITEST_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SPRAT_SECRET_KEY", raising=False)
 
 
 def _raw(tmp_path):
@@ -111,15 +111,15 @@ def test_lost_key_file_makes_old_secrets_undecryptable(tmp_path):
 
 def test_key_source(tmp_path, monkeypatch):
     assert SecretStore(tmp_path).key_source == str(tmp_path / ".secret.key")
-    monkeypatch.setenv("APITEST_SECRET_KEY", "x")
-    assert SecretStore(tmp_path).key_source == "APITEST_SECRET_KEY"
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "x")
+    assert SecretStore(tmp_path).key_source == "SPRAT_SECRET_KEY"
 
 
-# ---------- APITEST_SECRET_KEY ----------
+# ---------- SPRAT_SECRET_KEY ----------
 
 def test_env_fernet_key_is_used_as_is(tmp_path, monkeypatch):
     key = Fernet.generate_key().decode()
-    monkeypatch.setenv("APITEST_SECRET_KEY", key)
+    monkeypatch.setenv("SPRAT_SECRET_KEY", key)
     SecretStore(tmp_path).set("p", "K", "value")
     assert Fernet(key).decrypt(_raw(tmp_path)["p"]["K"]["value"].encode()) == b"value"
     assert not (tmp_path / ".secret.key").exists()
@@ -127,7 +127,7 @@ def test_env_fernet_key_is_used_as_is(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("phrase", ["short", "a long passphrase for the server", "ünïcødé 🔑", "=" * 44])
 def test_env_passphrase_is_hashed_into_a_key(tmp_path, monkeypatch, phrase):
-    monkeypatch.setenv("APITEST_SECRET_KEY", phrase)
+    monkeypatch.setenv("SPRAT_SECRET_KEY", phrase)
     SecretStore(tmp_path).set("p", "K", "value")
     derived = Fernet(base64.urlsafe_b64encode(hashlib.sha256(phrase.encode()).digest()))
     assert derived.decrypt(_raw(tmp_path)["p"]["K"]["value"].encode()) == b"value"
@@ -136,7 +136,7 @@ def test_env_passphrase_is_hashed_into_a_key(tmp_path, monkeypatch, phrase):
 
 def test_switching_from_key_file_to_env_key(tmp_path, monkeypatch):
     SecretStore(tmp_path).set("p", "K", "v")
-    monkeypatch.setenv("APITEST_SECRET_KEY", "now a passphrase")
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "now a passphrase")
     with pytest.raises(ValueError, match="encryption key changed"):
         SecretStore(tmp_path).values("p")
 
@@ -144,7 +144,7 @@ def test_switching_from_key_file_to_env_key(tmp_path, monkeypatch):
 def test_key_is_cached_per_instance(tmp_path, monkeypatch):
     s = SecretStore(tmp_path)
     s.set("p", "K", "v")
-    monkeypatch.setenv("APITEST_SECRET_KEY", "changed later")
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "changed later")
     assert s.values("p") == {"K": "v"}  # same instance keeps its key
 
 
@@ -326,7 +326,7 @@ def test_key_file_created_by_another_process_first_is_waited_for_and_used(tmp_pa
     store.set("p", "PW", "value-1")
     writer.join()
     assert kf.read_bytes() == key  # the other process's key was kept, not overwritten
-    monkeypatch.setenv("APITEST_SECRET_KEY", key.decode())
+    monkeypatch.setenv("SPRAT_SECRET_KEY", key.decode())
     assert SecretStore(tmp_path).values("p") == {"PW": "value-1"}  # and the secret is encrypted with it
 
 

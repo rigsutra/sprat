@@ -1,4 +1,4 @@
-"""Trusted CAs (apitest.tls): bundle building, Windows store filtering, explain(), and TLS handshakes with
+"""Trusted CAs (sprat.tls): bundle building, Windows store filtering, explain(), and TLS handshakes with
 certificates generated in tmp_path. Handshakes run through memory BIOs, so antivirus web shields that re-sign
 even loopback HTTPS can't interfere; the two real-socket tests skip when that happens."""
 import datetime as dt
@@ -20,8 +20,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-from apitest import tls
-from apitest.discover import client_for
+from sprat import tls
+from sprat.discover import client_for
 
 REAL_WINDOWS_PEMS = tls._windows_pems
 
@@ -31,7 +31,7 @@ def isolated(tmp_path, monkeypatch):
     """Bundle files go to tmp_path, not the system temp dir; caches don't leak between tests; the (slow,
     machine-specific) Windows store is left out unless a test asks for it."""
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
-    monkeypatch.delenv("APITEST_CA_BUNDLE", raising=False)
+    monkeypatch.delenv("SPRAT_CA_BUNDLE", raising=False)
     monkeypatch.setattr(tls, "_windows_pems", lambda: [])
     tls.ca_bundle.cache_clear()
     tls.ssl_context.cache_clear()
@@ -83,7 +83,7 @@ def write_pair(tmp_path, name, cert, key, chain=()):
 
 @pytest.fixture(scope="module")
 def pki():
-    ca = make_cert("apitest Test Root CA", ca=True)
+    ca = make_cert("sprat Test Root CA", ca=True)
     leaf = make_cert("localhost", signer=ca)
     return {"ca": ca, "leaf": leaf}
 
@@ -95,7 +95,7 @@ def _server_ctx(tmp_path, cert, key, chain=()):
 
 
 def mem_handshake(server_ctx, hostname="localhost", client_ctx=None):
-    """TLS handshake through memory BIOs with apitest's client context."""
+    """TLS handshake through memory BIOs with sprat's client context."""
     client_ctx = client_ctx or tls.ssl_context()
     c_in, c_out, s_in, s_out = (ssl.MemoryBIO() for _ in range(4))
     client = client_ctx.wrap_bio(c_in, c_out, server_hostname=hostname)
@@ -118,7 +118,7 @@ def mem_handshake(server_ctx, hostname="localhost", client_ctx=None):
 def _trust(tmp_path, monkeypatch, cert):
     extra = tmp_path / "root.pem"
     extra.write_text(pem(cert), encoding="ascii")
-    monkeypatch.setenv("APITEST_CA_BUNDLE", str(extra))
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", str(extra))
 
 
 class TLSServer:
@@ -225,7 +225,7 @@ def test_bundle_layout_and_location(tmp_path, monkeypatch, pki):
     monkeypatch.setattr(tls, "_windows_pems", lambda: [pem(pki["ca"][0])])
     path = Path(tls.ca_bundle())
     text = path.read_text(encoding="ascii")
-    assert path.parent == tmp_path and path.name == f"apitest-ca-{hashlib.sha256(text.encode()).hexdigest()[:16]}.pem"
+    assert path.parent == tmp_path and path.name == f"sprat-ca-{hashlib.sha256(text.encode()).hexdigest()[:16]}.pem"
     assert text.startswith(Path(certifi.where()).read_text(encoding="ascii").strip())
     assert text.endswith(pem(pki["ca"][0]).strip() + "\n")
     assert list(tmp_path.glob("*.tmp")) == []
@@ -234,26 +234,26 @@ def test_bundle_layout_and_location(tmp_path, monkeypatch, pki):
 def test_bundle_includes_extra_ca_file(tmp_path, monkeypatch, pki):
     extra = tmp_path / "corp.pem"
     extra.write_text("\n\n" + pem(pki["ca"][0]) + "\n\n", encoding="ascii")
-    monkeypatch.setenv("APITEST_CA_BUNDLE", f"  {extra}  ")
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", f"  {extra}  ")
     text = Path(tls.ca_bundle()).read_text(encoding="ascii")
     certifi_count = Path(certifi.where()).read_text(encoding="ascii").count("BEGIN CERTIFICATE")
     assert text.count("BEGIN CERTIFICATE") == certifi_count + 1 and pem(pki["ca"][0]).strip() in text
 
 
 def test_blank_extra_is_ignored(monkeypatch):
-    monkeypatch.setenv("APITEST_CA_BUNDLE", "   ")
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", "   ")
     text = Path(tls.ca_bundle()).read_text(encoding="ascii")
     assert text == Path(certifi.where()).read_text(encoding="ascii").strip() + "\n"
 
 
 def test_missing_extra_file_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("APITEST_CA_BUNDLE", str(tmp_path / "nope.pem"))
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", str(tmp_path / "nope.pem"))
     with pytest.raises(FileNotFoundError):
         tls.ca_bundle()
 
 
 def test_extra_bundle_pointing_at_a_directory_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("APITEST_CA_BUNDLE", str(tmp_path))
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", str(tmp_path))
     with pytest.raises(OSError):
         tls.ca_bundle()
 
@@ -267,7 +267,7 @@ def test_bundle_is_cached_and_content_addressed(tmp_path, monkeypatch, pki):
     _trust(tmp_path, monkeypatch, pki["ca"][0])
     tls.ca_bundle.cache_clear()
     second = tls.ca_bundle()
-    assert second != first and len(list(tmp_path.glob("apitest-ca-*.pem"))) == 2
+    assert second != first and len(list(tmp_path.glob("sprat-ca-*.pem"))) == 2
 
 
 # ---------- ssl_context ----------
@@ -278,14 +278,14 @@ def test_context_verifies_and_trusts_extra_ca(tmp_path, monkeypatch, pki):
     assert ctx is tls.ssl_context()
     assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
     subjects = [dict(x[0] for x in c["subject"]).get("commonName") for c in ctx.get_ca_certs()]
-    assert "apitest Test Root CA" in subjects
+    assert "sprat Test Root CA" in subjects
 
 
 def test_garbage_between_certificates_is_tolerated(tmp_path, monkeypatch, pki):
     extra = tmp_path / "messy.pem"
     extra.write_text("# exported by some tool\nBag Attributes: none\n" + pem(pki["ca"][0]) + "trailing junk\n",
                      encoding="ascii")
-    monkeypatch.setenv("APITEST_CA_BUNDLE", str(extra))
+    monkeypatch.setenv("SPRAT_CA_BUNDLE", str(extra))
     assert tls.ssl_context().cert_store_stats()["x509_ca"] > 1
 
 
@@ -297,16 +297,16 @@ def test_private_ca_rejected_by_default_and_explained(tmp_path, pki):
     assert tls.explain(ei.value) == (
         "The server's HTTPS certificate was rejected (certificate verify failed: unable to get local issuer "
         "certificate). If an antivirus or company proxy inspects HTTPS, or the server uses an internal CA, "
-        "export that root certificate as PEM and set APITEST_CA_BUNDLE to the file.")
+        "export that root certificate as PEM and set SPRAT_CA_BUNDLE to the file.")
 
 
-def test_private_ca_trusted_via_apitest_ca_bundle(tmp_path, monkeypatch, pki):
+def test_private_ca_trusted_via_sprat_ca_bundle(tmp_path, monkeypatch, pki):
     _trust(tmp_path, monkeypatch, pki["ca"][0])
     assert mem_handshake(_server_ctx(tmp_path, *pki["leaf"])).startswith("TLSv1.")
 
 
 def test_intermediate_chain_sent_by_server(tmp_path, monkeypatch, pki):
-    inter = make_cert("apitest Intermediate", signer=pki["ca"], ca=True)
+    inter = make_cert("sprat Intermediate", signer=pki["ca"], ca=True)
     leaf = make_cert("localhost", signer=inter)
     _trust(tmp_path, monkeypatch, pki["ca"][0])
     assert mem_handshake(_server_ctx(tmp_path, *leaf, chain=[inter[0]]))
@@ -318,7 +318,7 @@ def test_self_signed_server_explained(tmp_path):
     with pytest.raises(ssl.SSLCertVerificationError) as ei:
         mem_handshake(_server_ctx(tmp_path, *make_cert("localhost")))
     msg = tls.explain(ei.value)
-    assert ("self-signed" in msg or "self signed" in msg) and "APITEST_CA_BUNDLE" in msg
+    assert ("self-signed" in msg or "self signed" in msg) and "SPRAT_CA_BUNDLE" in msg
 
 
 def test_expired_certificate_explained_without_ca_advice(tmp_path, monkeypatch, pki):
@@ -326,7 +326,7 @@ def test_expired_certificate_explained_without_ca_advice(tmp_path, monkeypatch, 
     with pytest.raises(ssl.SSLCertVerificationError) as ei:
         mem_handshake(_server_ctx(tmp_path, *make_cert("localhost", signer=pki["ca"], days=(-30, -1))))
     msg = tls.explain(ei.value)
-    assert "expired" in msg and "APITEST_CA_BUNDLE" not in msg
+    assert "expired" in msg and "SPRAT_CA_BUNDLE" not in msg
 
 
 def test_not_yet_valid_certificate(tmp_path, monkeypatch, pki):
@@ -346,13 +346,13 @@ def test_hostname_checking(tmp_path, monkeypatch, pki, hostname, ok):
     with pytest.raises(ssl.SSLCertVerificationError) as ei:
         mem_handshake(_server_ctx(tmp_path, *pki["leaf"]), hostname=hostname)
     msg = tls.explain(ei.value)
-    assert "rejected" in msg and "mismatch" in msg.lower() and "APITEST_CA_BUNDLE" not in msg
+    assert "rejected" in msg and "mismatch" in msg.lower() and "SPRAT_CA_BUNDLE" not in msg
 
 
 # ---------- client_for ----------
 
 def test_client_for_localhost_https_end_to_end(serve, pki, tmp_path, monkeypatch):
-    """discover.client_for -> IPv4-bound transport + apitest's CA bundle, against a real HTTPS server."""
+    """discover.client_for -> IPv4-bound transport + sprat's CA bundle, against a real HTTPS server."""
     srv = serve(*pki["leaf"])
     _skip_if_intercepted(srv.port, pki["leaf"][0])
     _trust(tmp_path, monkeypatch, pki["ca"][0])
@@ -367,7 +367,7 @@ def test_httpx_error_through_client_for_is_explained(serve, pki):
     with client_for(f"https://localhost:{srv.port}/", timeout=5) as c:
         with pytest.raises(httpx.ConnectError) as ei:
             c.get(f"https://localhost:{srv.port}/")
-    assert "APITEST_CA_BUNDLE" in tls.explain(ei.value)
+    assert "SPRAT_CA_BUNDLE" in tls.explain(ei.value)
 
 
 def test_client_for_transport_choice():
@@ -381,9 +381,9 @@ def test_client_for_transport_choice():
         assert c._transport._pool._local_address is None
 
 
-def test_client_for_defaults_to_apitest_context(monkeypatch):
+def test_client_for_defaults_to_sprat_context(monkeypatch):
     sentinel = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    import apitest.discover as d
+    import sprat.discover as d
     monkeypatch.setattr(d, "ssl_context", lambda: sentinel)
     with client_for("https://localhost/") as c:
         assert c._transport._pool._ssl_context is sentinel
@@ -407,13 +407,13 @@ def test_explain_verify_failures(reason, advice):
     e = ssl.SSLCertVerificationError(f"[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: {reason} (_ssl.c:1028)")
     msg = tls.explain(e)
     assert msg.startswith(f"The server's HTTPS certificate was rejected (certificate verify failed: {reason}).")
-    assert ("APITEST_CA_BUNDLE" in msg) is advice
+    assert ("SPRAT_CA_BUNDLE" in msg) is advice
 
 
 def test_explain_wrapped_in_httpx_error():
     e = httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate "
                            "(_ssl.c:1000)")
-    assert "self-signed certificate" in tls.explain(e) and "APITEST_CA_BUNDLE" in tls.explain(e)
+    assert "self-signed certificate" in tls.explain(e) and "SPRAT_CA_BUNDLE" in tls.explain(e)
 
 
 @pytest.mark.parametrize("exc,expected", [

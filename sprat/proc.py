@@ -89,7 +89,7 @@ def run_cmd(cmd: list[str], *, cancel: threading.Event | None = None, timeout: f
     # Output goes to files, not pipes, so a chatty process can't block on a full pipe. Separate
     # read handles (Tail) are used for live output: an inherited handle shares its file position
     # with the child, so seeking it would corrupt the child's writes.
-    tmp = Path(tempfile.mkdtemp(prefix="apitest-"))
+    tmp = Path(tempfile.mkdtemp(prefix="sprat-"))
     out_path, err_path = tmp / "stdout", tmp / "stderr"
     try:
         with open(out_path, "wb") as out, open(err_path, "wb") as err:

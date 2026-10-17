@@ -11,12 +11,12 @@ import threading
 
 import pytest
 
-from apitest.config import Config
-from apitest.models import Finding
-from apitest.proc import Cancelled, Result
-from apitest.spec import Operation, Spec
-from apitest.stages import lint
-from apitest.testlog import TestLog, iter_entries
+from sprat.config import Config
+from sprat.models import Finding
+from sprat.proc import Cancelled, Result
+from sprat.spec import Operation, Spec
+from sprat.stages import lint
+from sprat.testlog import TestLog, iter_entries
 
 NPX = r"C:\nodejs\npx.cmd"
 SPEC_JSON = '{"openapi": "3.0.3", "info": {"title": "t", "version": "1"}, "paths": {}}'
@@ -105,10 +105,10 @@ def test_command_line(tmp_path, tool):
 
 
 def test_env_inherits_and_adds_node_ca_bundle(tmp_path, tool, monkeypatch):
-    monkeypatch.setenv("APITEST_LINT_MARKER", "1")
+    monkeypatch.setenv("SPRAT_LINT_MARKER", "1")
     _run(tmp_path, tool=tool)
     env = tool.calls[0][1]["env"]
-    assert env["NODE_EXTRA_CA_CERTS"] == r"C:\ca\bundle.pem" and env["APITEST_LINT_MARKER"] == "1"
+    assert env["NODE_EXTRA_CA_CERTS"] == r"C:\ca\bundle.pem" and env["SPRAT_LINT_MARKER"] == "1"
     assert os.environ.get("NODE_EXTRA_CA_CERTS") != r"C:\ca\bundle.pem"  # parent env untouched
 
 
@@ -223,7 +223,7 @@ def test_cancel_propagates(tmp_path, tool):
 
 
 def test_runner_reports_a_lint_timeout_as_error(tmp_path, tool, monkeypatch):
-    from apitest import runner
+    from sprat import runner
     tool.exc = subprocess.TimeoutExpired(["npx"], 300)
     monkeypatch.setattr(runner, "load_spec", lambda *a, **k: _spec())
     res, = runner.run_pipeline(Config(spec="x", stages=["lint"], out_dir=str(tmp_path / "out")))
@@ -320,7 +320,7 @@ def test_error_and_skip_log_nothing(tmp_path, tool, monkeypatch):
 
 
 def test_findings_get_operations_from_runner_annotate(tmp_path, tool):
-    from apitest.runner import annotate
+    from sprat.runner import annotate
     items = [_item("b", ["paths", "/users/{id}", "get", "responses"]), _item("a", ["info"])]
     res = _run(tmp_path, items=items, tool=tool)
     annotate(_spec(), "http://localhost:8000", [res])

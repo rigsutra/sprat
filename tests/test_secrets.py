@@ -2,12 +2,12 @@ import json
 
 import pytest
 
-from apitest.config import expand_env
-from apitest.secretstore import SecretStore
+from sprat.config import expand_env
+from sprat.secretstore import SecretStore
 
 
 def test_values_are_encrypted_on_disk_and_never_listed(tmp_path, monkeypatch):
-    monkeypatch.delenv("APITEST_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SPRAT_SECRET_KEY", raising=False)
     s = SecretStore(tmp_path)
     s.set("ntt", "NTT_PASSWORD", 'p@ss"w\\ord')
     raw = (tmp_path / "secrets.json").read_text()
@@ -20,10 +20,10 @@ def test_values_are_encrypted_on_disk_and_never_listed(tmp_path, monkeypatch):
 
 
 def test_env_key_and_wrong_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("APITEST_SECRET_KEY", "a long passphrase for the server")
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "a long passphrase for the server")
     SecretStore(tmp_path).set("p", "K", "v")
     assert not (tmp_path / ".secret.key").exists()
-    monkeypatch.setenv("APITEST_SECRET_KEY", "a different passphrase")
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "a different passphrase")
     with pytest.raises(ValueError, match="encryption key changed"):
         SecretStore(tmp_path).values("p")
 
@@ -47,7 +47,7 @@ def test_expand_prefers_project_secret_then_environment(monkeypatch):
 
 
 def test_json_body_password_with_quotes_stays_valid(monkeypatch):
-    from apitest.auth import LoginConfig, TokenProvider
+    from sprat.auth import LoginConfig, TokenProvider
     p = TokenProvider(LoginConfig(url="http://x/login", body='{"email": "a", "password": "${PW}"}'),
                       variables={"PW": 'he said "hi" \\o/'})
     assert json.loads(p.resolved()["body"])["password"] == 'he said "hi" \\o/'
@@ -55,7 +55,7 @@ def test_json_body_password_with_quotes_stays_valid(monkeypatch):
 
 def test_web_secrets_flow(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
-    from apitest.web import app as web
+    from sprat.web import app as web
     import httpx
     spec = {"openapi": "3.0.1", "info": {"title": "t", "version": "1"}, "servers": [{"url": "http://s.test"}],
             "paths": {"/a": {"get": {"responses": {"200": {"description": "ok"}}}}}}

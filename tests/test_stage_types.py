@@ -1,4 +1,4 @@
-"""Wrong-type probing stage (apitest/stages/types.py): schema helpers, value generation and the
+"""Wrong-type probing stage (sprat/stages/types.py): schema helpers, value generation and the
 stage itself against in-process fake APIs (httpx.MockTransport, no network)."""
 import json
 import threading
@@ -6,11 +6,11 @@ import threading
 import httpx
 import pytest
 
-from apitest.config import Config
-from apitest.proc import Cancelled
-from apitest.spec import Operation, Spec, resolve
-from apitest.stages import types as T
-from apitest.testlog import TestLog, iter_entries
+from sprat.config import Config
+from sprat.proc import Cancelled
+from sprat.spec import Operation, Spec, resolve
+from sprat.stages import types as T
+from sprat.testlog import TestLog, iter_entries
 
 BASE = "http://api.test"
 OAS = {"openapi": "3.0.1"}

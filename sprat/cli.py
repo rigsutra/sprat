@@ -13,7 +13,7 @@ from .runner import STAGE_FUNCS, failed, run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="apitest", description="Test any REST API from its Swagger/OpenAPI spec")
+    p = argparse.ArgumentParser(prog="sprat", description="Test any REST API from its Swagger/OpenAPI spec")
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="run the selected test stages")
     r.add_argument("spec", nargs="?", help="Swagger/OpenAPI URL or file (or set `spec:` in --config)")

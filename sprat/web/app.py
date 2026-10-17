@@ -52,7 +52,7 @@ GUIDES = Path(__file__).parent / "guides"  # downloadable copies of docs/*.md (t
 GUIDE_FILES = {"SWAGGER_GUIDE.md", "AI_RULES_OPENAPI.md", "STAGES.md"}
 DATA = Path("reports").resolve()
 
-app = FastAPI(title="apitest", docs_url=None, redoc_url=None)
+app = FastAPI(title="SPRAT", docs_url=None, redoc_url=None)
 _runs: dict[str, dict] = {}            # live state of runs started by this process
 _cancels: dict[str, threading.Event] = {}
 _secrets: dict[str, dict[str, str]] = {}  # project id -> {"headers": text, "headers_b": text}
@@ -848,7 +848,7 @@ def project_yaml(pid: str):
     for k in ("timeout", "zap_image", "zap_threads", "zap_rule_minutes", "zap_max_minutes", "types_max_fields", "operations", "cancel", "on_progress", "testlog", "title",
               "auth_a", "auth_b", "variables"):  # runtime-only fields; load_config rejects them
         data.pop(k, None)
-    return f"# apitest config for project '{p['name']}'\n" + yaml.safe_dump(data, sort_keys=False)
+    return f"# sprat config for project '{p['name']}'\n" + yaml.safe_dump(data, sort_keys=False)
 
 
 # ---------------- routes: runs ----------------
@@ -958,7 +958,7 @@ def run_download(run_id: str, kind: str):
     d = _run_dir(run_id)
     meta = _load_meta(run_id) or {}
     slug = re.sub(r"[^a-z0-9]+", "-", (meta.get("project_name") or "run").lower()).strip("-") or "run"
-    base = f"apitest-{slug}-{run_id}"
+    base = f"sprat-{slug}-{run_id}"
     if kind in ("html", "zip", "csv", "ndjson") and meta.get("status") not in ("running", "stopping"):
         _ensure_artifacts(d, meta)  # older runs: rebuild what can be recovered
     if kind in ("html", "view"):
@@ -969,7 +969,7 @@ def run_download(run_id: str, kind: str):
             return FileResponse(f, media_type="text/html")
         return FileResponse(f, media_type="text/html", filename=f"{base}-report.html")
     if kind in ("csv", "ndjson") and not (d / "test-log.ndjson").is_file():
-        raise HTTPException(404, "This run has no test log (it was made by an older apitest version)")
+        raise HTTPException(404, "This run has no test log (it was made by an older sprat version)")
     if kind == "csv":
         csv_path = d / "test-log.csv"
         if not csv_path.is_file() or (d / "test-log.ndjson").stat().st_mtime > csv_path.stat().st_mtime:
@@ -1023,7 +1023,7 @@ def _ensure_artifacts(d: Path, meta: dict) -> None:
     cov = coverage_mod.build(ops, settings, {s["name"]: {"status": s["status"], "note": s.get("note", "")}
                                              for s in report["stages"]}, d / "test-log.ndjson")
     if legacy:
-        cov["warnings"].insert(0, "This run was made by an older apitest version that didn't record every request. "
+        cov["warnings"].insert(0, "This run was made by an older sprat version that didn't record every request. "
                                   "Only the behaviour tests (Schemathesis) could be recovered; the other tests' "
                                   "individual requests weren't saved, so they may show as not tested.")
     coverage_mod.write(cov, d)
@@ -1034,7 +1034,7 @@ def _ensure_artifacts(d: Path, meta: dict) -> None:
 # for rebuilding old runs, never served or exported
 UNMASKED_FILES = {"schemathesis-events.ndjson"}
 
-ZIP_README = """apitest run export
+ZIP_README = """sprat run export
 
 test-report.html  Start here: per API, what was tested and what wasn't (and why), the problems found,
                   and every test with its input, output and result. Open it in any browser.
@@ -1071,7 +1071,7 @@ def serve(host: str, port: int, data_dir: str = "reports") -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         if s.connect_ex(("127.0.0.1" if host in ("0.0.0.0", "localhost") else host, port)) == 0:
-            raise SystemExit(f"Port {port} is already in use: the apitest UI (or another program) is already "
+            raise SystemExit(f"Port {port} is already in use: the sprat UI (or another program) is already "
                              f"running there. Open http://localhost:{port}, or stop it first (Ctrl+C in the "
                              f"terminal that started it), or start this one with --port {port + 1}.")
     configure(data_dir)
@@ -1079,5 +1079,5 @@ def serve(host: str, port: int, data_dir: str = "reports") -> None:
     if host not in ("127.0.0.1", "localhost"):
         print(f"WARNING: binding to {host}. Anyone who can reach this port can make the server send "
               "requests to arbitrary URLs. Put authentication in front of it.")
-    print(f"apitest UI: http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}")
+    print(f"sprat UI: http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="warning")

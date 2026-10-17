@@ -10,9 +10,9 @@ import warnings
 import httpx
 import pytest
 
-from apitest import cli, runner
-from apitest.config import ALL_STAGES
-from apitest.models import SEVERITIES, Finding, StageResult
+from sprat import cli, runner
+from sprat.config import ALL_STAGES
+from sprat.models import SEVERITIES, Finding, StageResult
 
 DOC = {
     "openapi": "3.0.1", "info": {"title": "Shop", "version": "2.1"},
@@ -90,7 +90,7 @@ def test_top_level_help(capsys):
         cli.main(["--help"])
     assert e.value.code == 0
     text = capsys.readouterr().out
-    assert "usage: apitest" in text and all(c in text for c in ("run", "discover", "ui"))
+    assert "usage: sprat" in text and all(c in text for c in ("run", "discover", "ui"))
 
 
 @pytest.mark.parametrize("cmd,options", [
@@ -153,7 +153,7 @@ def test_repeatable_options_accumulate():
 # ---------- ui ----------
 
 def test_ui_calls_serve_with_defaults(monkeypatch):
-    import apitest.web.app as web
+    import sprat.web.app as web
     got = []
     monkeypatch.setattr(web, "serve", lambda *a: got.append(a))
     assert cli.main(["ui"]) == 0
@@ -161,7 +161,7 @@ def test_ui_calls_serve_with_defaults(monkeypatch):
 
 
 def test_ui_calls_serve_with_options(monkeypatch, tmp_path):
-    import apitest.web.app as web
+    import sprat.web.app as web
     got = []
     monkeypatch.setattr(web, "serve", lambda *a: got.append(a))
     assert cli.main(["ui", "--host", "0.0.0.0", "--port", "9001", "--data-dir", str(tmp_path / "d")]) == 0
@@ -205,8 +205,8 @@ def test_run_defaults_without_config(captured):
 
 
 def test_every_option_reaches_config(captured, monkeypatch, out):
-    monkeypatch.setenv("APITEST_CLI_TOK", "from-env")
-    assert cli.main(["run", "s.json", "--base-url", "http://b", "-H", "Authorization: Bearer ${APITEST_CLI_TOK}",
+    monkeypatch.setenv("SPRAT_CLI_TOK", "from-env")
+    assert cli.main(["run", "s.json", "--base-url", "http://b", "-H", "Authorization: Bearer ${SPRAT_CLI_TOK}",
                      "-H", "X-Url: http://h:1/p", "--header-b", "Authorization:  Bearer b:c ",
                      "--stages", " lint , types ", "--max-examples", "9", "--fail-on", "low", "--out", out,
                      "--no-mutating-authz", "--op", "GET /items", "--op", "post /items"]) == 0
@@ -219,9 +219,9 @@ def test_every_option_reaches_config(captured, monkeypatch, out):
 
 
 def test_config_file_is_used_and_cli_overrides_it(tmp_path, captured, monkeypatch):
-    monkeypatch.setenv("APITEST_CFG_TOK", "cfg-tok")
+    monkeypatch.setenv("SPRAT_CFG_TOK", "cfg-tok")
     c = tmp_path / "c.yaml"
-    c.write_text("spec: from-config.json\nbase_url: http://cfg\nheaders: {Authorization: 'Bearer ${APITEST_CFG_TOK}', "
+    c.write_text("spec: from-config.json\nbase_url: http://cfg\nheaders: {Authorization: 'Bearer ${SPRAT_CFG_TOK}', "
                  "X-Keep: k}\nheaders_b: {B: b}\nstages: [lint]\nmax_examples: 3\nfail_on: critical\n"
                  "out_dir: cfg-out\noperations: ['GET /a']\nno_mutating_authz: true\n", encoding="utf-8")
     assert cli.main(["run", "--config", str(c)]) == 0
@@ -333,8 +333,8 @@ def test_op_filter_end_to_end(spec_file, out, stages, capsys):
 
 
 def test_headers_reach_stages(spec_file, out, stages, monkeypatch):
-    monkeypatch.setenv("APITEST_E2E_TOK", "tok-123456")
-    cli.main(["run", spec_file, "--out", out, "--stages", "authz", "-H", "Authorization: Bearer ${APITEST_E2E_TOK}",
+    monkeypatch.setenv("SPRAT_E2E_TOK", "tok-123456")
+    cli.main(["run", spec_file, "--out", out, "--stages", "authz", "-H", "Authorization: Bearer ${SPRAT_E2E_TOK}",
               "--header-b", "Authorization: Bearer other", "--no-mutating-authz"])
     cfg = stages["cfg"]
     assert cfg.headers == {"Authorization": "Bearer tok-123456"} and cfg.headers_b == {"Authorization": "Bearer other"}
@@ -378,13 +378,13 @@ def test_login_unreachable_exits_2(tmp_path, spec_file, out, stages, monkeypatch
 
 @pytest.mark.parametrize("extra", [
     ["-H", "NoColonHere"],
-    ["--header-b", "X: ${APITEST_DEFINITELY_UNSET}"],
+    ["--header-b", "X: ${SPRAT_DEFINITELY_UNSET}"],
     ["--op", "GET /not-in-spec"],
     ["--config", "BADCONFIG"],
     ["MISSINGSPEC"],
 ], ids=["bad-header", "unset-var", "unknown-op", "unknown-config-key", "missing-spec-file"])
 def test_user_errors_exit_2_with_message(tmp_path, spec_file, out, stages, capsys, monkeypatch, extra):
-    monkeypatch.delenv("APITEST_DEFINITELY_UNSET", raising=False)
+    monkeypatch.delenv("SPRAT_DEFINITELY_UNSET", raising=False)
     bad_cfg = tmp_path / "bad.yaml"
     bad_cfg.write_text("nonsense_key: 1\n")
     extra = [str(bad_cfg) if a == "BADCONFIG" else str(tmp_path / "nope.json") if a == "MISSINGSPEC" else a
@@ -412,7 +412,7 @@ def test_discover_lists_specs_and_operations(monkeypatch, capsys):
 
 
 def test_discover_embedded_and_untitled(monkeypatch, spec_file, capsys):
-    import apitest.discover as disc
+    import sprat.discover as disc
     got = {}
 
     def fake(url, headers):
@@ -447,14 +447,14 @@ def test_discover_bad_header_raises(monkeypatch):
 
 
 def test_discover_expands_env_in_headers(monkeypatch, capsys):
-    monkeypatch.setenv("APITEST_DISC_TOK", "secret-tok")
+    monkeypatch.setenv("SPRAT_DISC_TOK", "secret-tok")
     seen = []
 
     def handler(r):
         seen.append(r.headers.get("authorization"))
         return httpx.Response(200, json=DOC)
     _mock_http(monkeypatch, handler)
-    assert cli.main(["discover", "http://app.test/openapi.json", "-H", "Authorization: Bearer ${APITEST_DISC_TOK}"]) == 0
+    assert cli.main(["discover", "http://app.test/openapi.json", "-H", "Authorization: Bearer ${SPRAT_DISC_TOK}"]) == 0
     assert set(seen) == {"Bearer secret-tok"}
 
 
@@ -470,22 +470,22 @@ def _run_module(name, argv, monkeypatch):
 
 
 def test_cli_module_as_main(monkeypatch, capsys):
-    assert _run_module("apitest.cli", ["apitest", "run"], monkeypatch) == 2
+    assert _run_module("sprat.cli", ["sprat", "run"], monkeypatch) == 2
     assert "no spec given" in capsys.readouterr().err
 
 
 def test_package_main(monkeypatch, capsys):
-    assert _run_module("apitest", ["apitest", "--help"], monkeypatch) == 0
+    assert _run_module("sprat", ["sprat", "--help"], monkeypatch) == 0
     assert "discover" in capsys.readouterr().out
 
 
 @pytest.mark.slow
-def test_python_dash_m_apitest(tmp_path):
+def test_python_dash_m_sprat(tmp_path):
     env = {**os.environ, "PYTHONPATH": os.path.dirname(os.path.dirname(os.path.abspath(cli.__file__)))}
-    p = subprocess.run([sys.executable, "-m", "apitest", "run"], cwd=tmp_path, capture_output=True, text=True,
+    p = subprocess.run([sys.executable, "-m", "sprat", "run"], cwd=tmp_path, capture_output=True, text=True,
                        timeout=120, env=env)
     assert p.returncode == 2 and "error: no spec given" in p.stderr
-    p = subprocess.run([sys.executable, "-m", "apitest", "run", "--help"], cwd=tmp_path, capture_output=True,
+    p = subprocess.run([sys.executable, "-m", "sprat", "run", "--help"], cwd=tmp_path, capture_output=True,
                        text=True, timeout=120, env=env)
     assert p.returncode == 0 and "--fail-on" in p.stdout
     assert list(tmp_path.iterdir()) == []

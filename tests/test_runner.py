@@ -7,14 +7,14 @@ import time
 import httpx
 import pytest
 
-from apitest import runner
-from apitest.auth import LoginConfig, LoginError, TokenProvider
-from apitest.config import ALL_STAGES, Config
-from apitest.models import SEVERITIES, Finding, StageResult
-from apitest.proc import Cancelled, progress
-from apitest.runner import _template_regex, annotate, failed, run_pipeline
-from apitest.spec import load_spec
-from apitest.testlog import TestLog
+from sprat import runner
+from sprat.auth import LoginConfig, LoginError, TokenProvider
+from sprat.config import ALL_STAGES, Config
+from sprat.models import SEVERITIES, Finding, StageResult
+from sprat.proc import Cancelled, progress
+from sprat.runner import _template_regex, annotate, failed, run_pipeline
+from sprat.spec import load_spec
+from sprat.testlog import TestLog
 
 DOC = {
     "openapi": "3.0.1", "info": {"title": "Shop", "version": "1"},

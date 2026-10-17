@@ -10,11 +10,11 @@ from pathlib import Path
 import httpx
 import pytest
 
-from apitest.config import Config
-from apitest.proc import Cancelled
-from apitest.spec import Operation, Spec, filter_operations, load_spec
-from apitest.stages import authz
-from apitest.testlog import TestLog, iter_entries
+from sprat.config import Config
+from sprat.proc import Cancelled
+from sprat.spec import Operation, Spec, filter_operations, load_spec
+from sprat.stages import authz
+from sprat.testlog import TestLog, iter_entries
 
 BASE = "http://api.test"
 NOSNIFF = {"x-content-type-options": "nosniff"}

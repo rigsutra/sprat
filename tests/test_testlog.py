@@ -9,9 +9,9 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from apitest import testlog
-from apitest.spec import Operation
-from apitest.testlog import BODY_LIMIT, CSV_FIELDS, OpMatcher, TestLog, b64_or_text, iter_entries, log_of, write_csv
+from sprat import testlog
+from sprat.spec import Operation
+from sprat.testlog import BODY_LIMIT, CSV_FIELDS, OpMatcher, TestLog, b64_or_text, iter_entries, log_of, write_csv
 
 JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJxYUB4LnRlc3QifQ.c2lnbmF0dXJlLXBhcnQ"
 

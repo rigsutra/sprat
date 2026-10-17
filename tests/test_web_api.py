@@ -21,9 +21,9 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from apitest.config import ALL_STAGES, load_config
-from apitest.testlog import TestLog
-from apitest.web import app as web
+from sprat.config import ALL_STAGES, load_config
+from sprat.testlog import TestLog
+from sprat.web import app as web
 
 SPEC_DOC = {
     "openapi": "3.0.1", "info": {"title": "Shop", "version": "2.1"},
@@ -107,7 +107,7 @@ def client(tmp_path, data, monkeypatch):
         kw["transport"] = httpx.MockTransport(handler)
         return real(*a, **kw)
     monkeypatch.setattr(httpx, "Client", fake_client)
-    monkeypatch.delenv("APITEST_SECRET_KEY", raising=False)
+    monkeypatch.delenv("SPRAT_SECRET_KEY", raising=False)
     web.configure(data)
     web._runs.clear(); web._cancels.clear(); web._secrets.clear()
     yield TestClient(web.app)
@@ -281,15 +281,15 @@ def test_env_reports_tool_availability(client, monkeypatch, npx, docker, rc, wan
 def test_vars_status_sources(client, monkeypatch):
     pid = _create(client)
     client.put(f"/api/projects/{pid}/secrets/SAVED_ONE", json={"value": "v-123456"})
-    monkeypatch.setenv("APITEST_FROM_ENV", "x")
-    monkeypatch.delenv("APITEST_NOWHERE", raising=False)
-    out = client.get("/api/vars", params={"names": " SAVED_ONE, APITEST_FROM_ENV,APITEST_NOWHERE, bad-name ,,",
+    monkeypatch.setenv("SPRAT_FROM_ENV", "x")
+    monkeypatch.delenv("SPRAT_NOWHERE", raising=False)
+    out = client.get("/api/vars", params={"names": " SAVED_ONE, SPRAT_FROM_ENV,SPRAT_NOWHERE, bad-name ,,",
                                           "project": pid}).json()
     by = {o["name"]: o for o in out}
-    assert list(by) == ["SAVED_ONE", "APITEST_FROM_ENV", "APITEST_NOWHERE", "bad-name"]
+    assert list(by) == ["SAVED_ONE", "SPRAT_FROM_ENV", "SPRAT_NOWHERE", "bad-name"]
     assert by["SAVED_ONE"]["source"] == "project" and by["SAVED_ONE"]["updated"] > 0
-    assert by["APITEST_FROM_ENV"] == {"name": "APITEST_FROM_ENV", "source": "environment", "updated": None}
-    assert by["APITEST_NOWHERE"]["source"] is None
+    assert by["SPRAT_FROM_ENV"] == {"name": "SPRAT_FROM_ENV", "source": "environment", "updated": None}
+    assert by["SPRAT_NOWHERE"]["source"] is None
     assert by["bad-name"]["source"] is None and "letters, digits" in by["bad-name"]["error"]
     assert "v-123456" not in json.dumps(out)
     # without a project, saved secrets don't count
@@ -442,7 +442,7 @@ def test_login_with_wrong_field_types_is_a_400(client):
 def test_secret_that_cannot_be_decrypted_is_a_clear_400(client, data, monkeypatch):
     pid = _create(client)
     client.put(f"/api/projects/{pid}/secrets/LOGIN_PW", json={"value": "pw-123456"})
-    monkeypatch.setenv("APITEST_SECRET_KEY", "a different passphrase")
+    monkeypatch.setenv("SPRAT_SECRET_KEY", "a different passphrase")
     web.configure(data)  # new key: the stored value can't be decrypted
     r = client.post("/api/login/test", json={"login": LOGIN, "project_id": pid})
     assert r.status_code == 400 and "can't be decrypted" in r.text
@@ -480,16 +480,16 @@ def test_discover_reports_spec_that_fails_to_load(client):
 
 
 def test_discover_sends_headers(client, monkeypatch):
-    monkeypatch.setenv("APITEST_SPEC_KEY", "spec-key-123456")
+    monkeypatch.setenv("SPRAT_SPEC_KEY", "spec-key-123456")
     res = client.post("/api/discover", json={"url": "http://fake.test/private/openapi.json",
-                                             "headers": "X-Key: ${APITEST_SPEC_KEY}"}).json()
+                                             "headers": "X-Key: ${SPRAT_SPEC_KEY}"}).json()
     assert res["specs"][0]["url"] == "http://fake.test/private/openapi.json" and len(res["specs"][0]["ops"]) == 4
 
 
-@pytest.mark.parametrize("headers,text", [("X-Key: ${APITEST_UNSET_VAR}", "APITEST_UNSET_VAR"),
+@pytest.mark.parametrize("headers,text", [("X-Key: ${SPRAT_UNSET_VAR}", "SPRAT_UNSET_VAR"),
                                           ("no colon here", "Name: value")])
 def test_discover_header_errors(client, monkeypatch, headers, text):
-    monkeypatch.delenv("APITEST_UNSET_VAR", raising=False)
+    monkeypatch.delenv("SPRAT_UNSET_VAR", raising=False)
     r = client.post("/api/discover", json={"url": "http://fake.test", "headers": headers})
     assert r.status_code == 400 and text in r.text
 
@@ -567,24 +567,24 @@ def test_spec_behind_a_key_is_loaded_with_an_unsaved_secret(client, data):
 
 
 def test_spec_header_with_unset_variable_still_tries_without_it(client, monkeypatch):
-    monkeypatch.delenv("APITEST_UNSET_VAR", raising=False)
-    pid = _create(client, headers="Authorization: Bearer ${APITEST_UNSET_VAR}")
+    monkeypatch.delenv("SPRAT_UNSET_VAR", raising=False)
+    pid = _create(client, headers="Authorization: Bearer ${SPRAT_UNSET_VAR}")
     assert len(client.get(f"/api/projects/{pid}").json()["operations"]) == 4
     r = client.post(f"/api/projects/{pid}/runs", json={})  # but a run needs it
-    assert r.status_code == 400 and "APITEST_UNSET_VAR has no value" in r.text
+    assert r.status_code == 400 and "SPRAT_UNSET_VAR has no value" in r.text
 
 
 def test_literal_header_lines_live_in_memory_only(client, data):
-    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${APITEST_ENV}",
+    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${SPRAT_ENV}",
                   headers_b="Authorization: Bearer token-of-b-654321")
     saved = (data / "projects" / f"{pid}.json").read_text(encoding="utf-8")
-    assert "literal-token" not in saved and "token-of-b" not in saved and "${APITEST_ENV}" in saved
+    assert "literal-token" not in saved and "token-of-b" not in saved and "${SPRAT_ENV}" in saved
     p = client.get(f"/api/projects/{pid}").json()
-    assert p["headers"] == "X-Env: ${APITEST_ENV}\nAuthorization: Bearer literal-token-123456"
+    assert p["headers"] == "X-Env: ${SPRAT_ENV}\nAuthorization: Bearer literal-token-123456"
     assert p["headers_b"] == "Authorization: Bearer token-of-b-654321"
     _restart(data)
     p = client.get(f"/api/projects/{pid}").json()
-    assert p["headers"] == "X-Env: ${APITEST_ENV}" and p["headers_b"] == ""
+    assert p["headers"] == "X-Env: ${SPRAT_ENV}" and p["headers_b"] == ""
 
 
 def test_blank_bola_and_exclude_entries_are_dropped(client):
@@ -800,16 +800,16 @@ def test_lint_only_run_needs_no_token(client, pipe):
 
 
 def test_yaml_export(client, monkeypatch):
-    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${APITEST_ENV}",
+    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${SPRAT_ENV}",
                   headers_b="X-B: literal-b-token-1", login_b=LOGIN, exclude_paths=["^/echo$"],
                   bola=[{"path": "/items/{id}", "params": {"id": "1"}}], max_examples=7, fail_on="critical")
     r = client.get(f"/api/projects/{pid}/yaml")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
-    assert r.text.startswith("# apitest config for project 'Shop'\n")
+    assert r.text.startswith("# sprat config for project 'Shop'\n")
     assert "literal-token" not in r.text and "literal-b-token" not in r.text
     d = yaml.safe_load(r.text)
     assert d["spec"] == "http://fake.test/openapi.json" and d["out_dir"] == f"reports/{pid}"
-    assert d["headers"] == {"X-Env": "${APITEST_ENV}", "Authorization": "<set me>"}
+    assert d["headers"] == {"X-Env": "${SPRAT_ENV}", "Authorization": "<set me>"}
     assert d["headers_b"] == {"X-B": "<set me>"}
     assert d["stages"] == ["authz"] and d["max_examples"] == 7 and d["fail_on"] == "critical"
     assert d["exclude_paths"] == ["^/echo$"] and d["bola"][0]["path"] == "/items/{id}"
@@ -820,8 +820,8 @@ def test_yaml_export(client, monkeypatch):
 
 
 def test_yaml_export_loads_in_the_cli(client, tmp_path, monkeypatch):
-    monkeypatch.setenv("APITEST_ENV", "x")
-    pid = _create(client, headers="X-Env: ${APITEST_ENV}")
+    monkeypatch.setenv("SPRAT_ENV", "x")
+    pid = _create(client, headers="X-Env: ${SPRAT_ENV}")
     f = tmp_path / "exported.yaml"
     f.write_text(client.get(f"/api/projects/{pid}/yaml").text, encoding="utf-8")
     cfg = load_config(str(f))
@@ -864,8 +864,8 @@ def test_run_refused_when_every_api_is_excluded(client, pipe):
 
 
 def test_run_settings_reach_the_pipeline_and_secrets_stay_masked(client, pipe, data, monkeypatch):
-    monkeypatch.setenv("APITEST_ENV", "env-value-abcdef")
-    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${APITEST_ENV}",
+    monkeypatch.setenv("SPRAT_ENV", "env-value-abcdef")
+    pid = _create(client, headers="Authorization: Bearer literal-token-123456\nX-Env: ${SPRAT_ENV}",
                   headers_b="Authorization: Bearer token-of-b-654321", stages=["authz", "types"], max_examples=9,
                   fail_on="low", no_mutating_authz=True, base_url="http://override.test", exclude_paths=["^/echo$"],
                   bola=[{"method": "get", "path": "/b?x=1"}, {"method": "GET", "path": "/a"}],
@@ -1231,7 +1231,7 @@ def _project_with_run(client, data, status="done", **meta):
 
 def test_download_ndjson_and_csv(client, data):
     _, d, rid = _project_with_run(client, data)
-    base = f"apitest-caf-api-{rid}"
+    base = f"sprat-caf-api-{rid}"
     r = client.get(f"/api/runs/{rid}/download/ndjson")
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/x-ndjson")
     assert f'filename="{base}-test-log.ndjson"' in r.headers["content-disposition"]
@@ -1260,7 +1260,7 @@ def test_download_html_and_view(client, data):
     assert not (d / "test-report.html").exists()
     r = client.get(f"/api/runs/{rid}/download/html")  # rebuilt for older runs
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
-    assert f'filename="apitest-caf-api-{rid}-report.html"' in r.headers["content-disposition"]
+    assert f'filename="sprat-caf-api-{rid}-report.html"' in r.headers["content-disposition"]
     assert "API test report — Café API!" in r.text
     assert (d / "coverage.json").is_file() and (d / "coverage.csv").is_file()
     v = client.get(f"/api/runs/{rid}/download/view")
@@ -1274,10 +1274,10 @@ def test_download_zip_has_everything(client, data):
     (d / "zap" / "zap.log").write_text("nested ✓", encoding="utf-8")
     r = client.get(f"/api/runs/{rid}/download/zip")
     assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
-    assert r.headers["content-disposition"] == f'attachment; filename="apitest-caf-api-{rid}.zip"'
+    assert r.headers["content-disposition"] == f'attachment; filename="sprat-caf-api-{rid}.zip"'
     z = zipfile.ZipFile(io.BytesIO(r.content))
     names = set(z.namelist())
-    base = f"apitest-caf-api-{rid}/"
+    base = f"sprat-caf-api-{rid}/"
     assert all(n.startswith(base) for n in names)
     assert {base + n for n in ("run.json", "report.json", "spec.json", "test-log.ndjson",
                                "test-report.html", "coverage.csv", "coverage.json", "README.txt", "zap/zap.log")} <= names
@@ -1330,7 +1330,7 @@ def test_legacy_run_is_rebuilt_from_schemathesis_events(client, data):
     assert r.status_code == 200
     assert (d / "test-log.ndjson").is_file() and (d / "test-log.csv").is_file()
     cov = json.loads((d / "coverage.json").read_text(encoding="utf-8"))
-    assert cov["warnings"][0].startswith("This run was made by an older apitest version")
+    assert cov["warnings"][0].startswith("This run was made by an older sprat version")
     assert [a["operation"] for a in cov["apis"]] == ["GET /a"]  # only the selected API
     tests = {t["test"]: t["status"] for t in cov["apis"][0]["tests"]}
     assert tests == {"Behaviour vs Swagger": "tested", "Access control": "not_recorded"}
@@ -1355,10 +1355,10 @@ def test_legacy_run_without_events_or_project(client, data):
 def test_run_without_project_name_gets_generic_filename(client, data):
     _mkrun(data, "20240101-000000-aaaaaa", "x", name=None, entries=_log_entries())
     r = client.get("/api/runs/20240101-000000-aaaaaa/download/ndjson")
-    assert 'filename="apitest-run-20240101-000000-aaaaaa-test-log.ndjson"' in r.headers["content-disposition"]
+    assert 'filename="sprat-run-20240101-000000-aaaaaa-test-log.ndjson"' in r.headers["content-disposition"]
     _mkrun(data, "20240101-000000-bbbbbb", "x", name="!!!", entries=_log_entries())
     r = client.get("/api/runs/20240101-000000-bbbbbb/download/ndjson")
-    assert "apitest-run-20240101-000000-bbbbbb" in r.headers["content-disposition"]
+    assert "sprat-run-20240101-000000-bbbbbb" in r.headers["content-disposition"]
 
 
 # ---------------- raw files ----------------
@@ -1415,7 +1415,7 @@ def test_serve_configures_and_warns_on_public_bind(client, data, tmp_path, monke
     web.serve(host, 8001, str(tmp_path / "served"))
     out = capsys.readouterr().out
     assert calls == [{"host": host, "port": 8001, "log_level": "warning"}]
-    assert web.DATA == (tmp_path / "served").resolve() and f"apitest UI: {url}" in out
+    assert web.DATA == (tmp_path / "served").resolve() and f"sprat UI: {url}" in out
     assert ("WARNING" in out) == warns
     web.configure(data)
 
@@ -1423,11 +1423,11 @@ def test_serve_configures_and_warns_on_public_bind(client, data, tmp_path, monke
 # ---------------- end to end with the real pipeline ----------------
 
 def test_secrets_are_masked_in_every_output(client, data, monkeypatch):
-    """A leaky API echoes every credential back; none may appear in anything apitest stores or serves."""
+    """A leaky API echoes every credential back; none may appear in anything sprat stores or serves."""
     store_secret, literal, env_secret = "tok-SECRET-abcdef123", "literal-KEY-987654", "env-SECRET-555555"
-    monkeypatch.setenv("APITEST_ENV_SECRET", env_secret)
+    monkeypatch.setenv("SPRAT_ENV_SECRET", env_secret)
     pid = _create(client, headers=f"Authorization: Bearer ${{API_TOKEN}}\nX-Api-Key: {literal}\n"
-                                  "X-Env: ${APITEST_ENV_SECRET}",
+                                  "X-Env: ${SPRAT_ENV_SECRET}",
                   secrets={"API_TOKEN": store_secret}, stages=["authz"])
     rid = _start(client, pid)
     run = _wait(client, rid)
@@ -1481,13 +1481,13 @@ def test_spec_url_with_surrounding_spaces_still_runs(client):
 def test_guide_downloads_match_docs_and_unknown_is_404():
     from pathlib import Path
     from fastapi.testclient import TestClient
-    from apitest.web.app import GUIDE_FILES, app
+    from sprat.web.app import GUIDE_FILES, app
     c = TestClient(app)
     docs = Path(__file__).resolve().parent.parent / "docs"
     for name in GUIDE_FILES:
         r = c.get(f"/guides/{name}")
         assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
-        assert r.content == (docs / name).read_bytes(), f"apitest/web/guides/{name} is out of date: copy it from docs/"
+        assert r.content == (docs / name).read_bytes(), f"sprat/web/guides/{name} is out of date: copy it from docs/"
     assert c.get("/guides/README.md").status_code == 404
     assert c.get("/guides/..%2Fapp.py").status_code == 404
 

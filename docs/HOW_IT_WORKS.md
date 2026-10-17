@@ -1,6 +1,6 @@
-# How apitest Works
+# How sprat Works
 
-apitest reads an API's Swagger/OpenAPI document and runs five test stages against it, from either
+sprat reads an API's Swagger/OpenAPI document and runs five test stages against it, from either
 the command line or a web UI. Both entry points call the same pipeline, and every stage's findings
 end up in one report.
 
@@ -9,7 +9,7 @@ end up in one report.
 ```
  ┌──────────────────────────────┐        ┌──────────────────────────────────┐
  │ CLI · cli.py                 │        │ Web UI · web/app.py + app.js     │
- │ apitest run (flags or YAML)  │        │ Projects, Run and Stop           │
+ │ sprat run (flags or YAML)  │        │ Projects, Run and Stop           │
  └──────────────┬───────────────┘        └────────────────┬─────────────────┘
                 │ Config from flags/YAML                  │ Config from saved project
                 ▼                                         ▼
@@ -44,14 +44,14 @@ Only `lint` works on the spec alone. The other four stages send real HTTP reques
 
 ## Entry points
 
-There is one command, `apitest`, which `pyproject.toml` maps to `apitest.cli:main`. It has three
+There is one command, `sprat`, which `pyproject.toml` maps to `sprat.cli:main`. It has three
 subcommands, and two of them end up in the same pipeline function, `run_pipeline()` in `runner.py`.
 
 | Command | What it does | Calls |
 | --- | --- | --- |
-| `apitest run` | Builds a `Config` from a YAML file and/or flags, runs the stages, and prints progress lines | `load_config()` → `run_pipeline()` → exit code from `failed()` |
-| `apitest discover <url>` | Finds the Swagger/OpenAPI documents of a running app and lists every operation | `discover()` → `load_spec()` |
-| `apitest ui` | Starts the web UI on `127.0.0.1:8787` | `web/app.py` → `serve()` (FastAPI on uvicorn) |
+| `sprat run` | Builds a `Config` from a YAML file and/or flags, runs the stages, and prints progress lines | `load_config()` → `run_pipeline()` → exit code from `failed()` |
+| `sprat discover <url>` | Finds the Swagger/OpenAPI documents of a running app and lists every operation | `discover()` → `load_spec()` |
+| `sprat ui` | Starts the web UI on `127.0.0.1:8787` | `web/app.py` → `serve()` (FastAPI on uvicorn) |
 
 The web UI is a FastAPI backend (`web/app.py`) plus a plain-JavaScript single-page frontend
 (`web/static/app.js`, `index.html`, `style.css`). When you press **Run**, the backend builds a
@@ -70,7 +70,7 @@ a `StageResult` holding a list of `Finding`s.
 2. **Extract operations.** Every `METHOD /path` becomes an `Operation`: whether it is secured,
    whether it has a body, and placeholder values for path and required query parameters (`1`, a
    fixed UUID, or the first enum value).
-3. **Work out the base URL.** `--base-url` wins. Otherwise apitest uses `servers[0]` (OpenAPI 3),
+3. **Work out the base URL.** `--base-url` wins. Otherwise sprat uses `servers[0]` (OpenAPI 3),
    `host` + `basePath` (Swagger 2), or the spec URL's origin.
 4. **Filter.** `--op` reduces the spec to the selected operations, and `exclude_paths` regexes
    remove operations. The reduced copy is what the stages test, so ZAP and Schemathesis skip the
@@ -91,7 +91,7 @@ marked `cancelled`, and a partial report is still written.
 ## How each stage tests the APIs
 
 Two stages check the spec or fuzz it with outside tools, two are hand-written HTTP checks built
-into apitest, and one is a full security scanner. All of them read the same parsed spec.
+into sprat, and one is a full security scanner. All of them read the same parsed spec.
 
 ### lint: is the spec itself good?
 
@@ -150,11 +150,11 @@ header problems and misconfigurations. ZAP's risk levels map to severities: 3 is
 ## Integrated tools
 
 The three outside tools are never imported as libraries. Each runs as a subprocess through
-`proc.run_cmd()`, writes a machine-readable output file, and apitest parses that file into
+`proc.run_cmd()`, writes a machine-readable output file, and sprat parses that file into
 `Finding`s. `run_cmd()` sends output to temp files rather than pipes, so a chatty tool can't block,
 and it supports cancel and timeout.
 
-| Tool | How it is launched | What apitest reads back | If it is missing |
+| Tool | How it is launched | What sprat reads back | If it is missing |
 | --- | --- | --- | --- |
 | Spectral | `npx --yes @stoplight/spectral-cli lint spec-full.json --ruleset .spectral.yaml -f json` (5 min timeout) | JSON array of rule hits; severity 0–3 maps to high/medium/low/info | No `npx` → `skipped` |
 | Schemathesis | `python -m schemathesis.cli run <spec> --url <base> --checks all --max-examples N` with user A's headers (30 min timeout) | `schemathesis-junit.xml` for findings, plus an NDJSON event stream tailed live for progress | Installed as a Python dependency; zero test cases → `error`, never a silent pass |
@@ -190,7 +190,7 @@ Everything is stored as plain files under `reports/` (change it with `--data-dir
 | `<out>/schemathesis-junit.xml`, `schemathesis.log`, `types.log`, `zap.json`, `zap.html`, `zap.log` | Each tool's raw output, for digging deeper | Each stage |
 
 A finding has a stage, a severity (`info` < `low` < `medium` < `high` < `critical`), a title, the
-endpoint, a detail text, and the spec operation it maps to. `apitest run` exits with 1 when any
+endpoint, a detail text, and the spec operation it maps to. `sprat run` exits with 1 when any
 finding is at or above `fail_on` (default `high`) or any stage ended in `error`. That makes it
 usable as a CI gate; `examples/azure-pipelines.yml` shows one.
 
@@ -208,21 +208,21 @@ The package has about 3,000 lines in total. The core is `runner.py` and the five
 
 | File | Lines | Role |
 | --- | --- | --- |
-| `apitest/cli.py` | 115 | Command-line parser for `run`, `discover` and `ui` |
-| `apitest/config.py` | 66 | `Config` dataclass, YAML loading, `${VAR}` expansion |
-| `apitest/spec.py` | 171 | Fetches and parses the spec into `Operation`s; base URL; `--op` filtering |
-| `apitest/discover.py` | 185 | Probes 15 spec paths and 8 Swagger UI paths; extracts specs from Swagger UI pages |
-| `apitest/runner.py` | 109 | `run_pipeline()`: runs the stages, maps findings to operations, decides pass or fail |
-| `apitest/models.py` | 28 | `Finding`, `StageResult`, severity order |
-| `apitest/proc.py` | 113 | Cancellable subprocess runner, process-tree kill, live file tail, progress hook |
-| `apitest/report.py` | 44 | Writes `report.json` and `report.html` |
-| `apitest/stages/lint.py` | 50 | Spectral |
-| `apitest/stages/conformance.py` | 128 | Schemathesis, JUnit parsing, severity mapping |
-| `apitest/stages/types.py` | 331 | Wrong-type probing |
-| `apitest/stages/authz.py` | 131 | Auth enforcement, BOLA, passive response checks |
-| `apitest/stages/zap.py` | 68 | OWASP ZAP in Docker |
-| `apitest/web/app.py` | 548 | FastAPI backend: projects, discovery, runs, stop, files |
-| `apitest/web/static/app.js` | 689 | Single-page frontend |
+| `sprat/cli.py` | 115 | Command-line parser for `run`, `discover` and `ui` |
+| `sprat/config.py` | 66 | `Config` dataclass, YAML loading, `${VAR}` expansion |
+| `sprat/spec.py` | 171 | Fetches and parses the spec into `Operation`s; base URL; `--op` filtering |
+| `sprat/discover.py` | 185 | Probes 15 spec paths and 8 Swagger UI paths; extracts specs from Swagger UI pages |
+| `sprat/runner.py` | 109 | `run_pipeline()`: runs the stages, maps findings to operations, decides pass or fail |
+| `sprat/models.py` | 28 | `Finding`, `StageResult`, severity order |
+| `sprat/proc.py` | 113 | Cancellable subprocess runner, process-tree kill, live file tail, progress hook |
+| `sprat/report.py` | 44 | Writes `report.json` and `report.html` |
+| `sprat/stages/lint.py` | 50 | Spectral |
+| `sprat/stages/conformance.py` | 128 | Schemathesis, JUnit parsing, severity mapping |
+| `sprat/stages/types.py` | 331 | Wrong-type probing |
+| `sprat/stages/authz.py` | 131 | Auth enforcement, BOLA, passive response checks |
+| `sprat/stages/zap.py` | 68 | OWASP ZAP in Docker |
+| `sprat/web/app.py` | 548 | FastAPI backend: projects, discovery, runs, stop, files |
+| `sprat/web/static/app.js` | 689 | Single-page frontend |
 
 Other folders: `tests/` holds the pytest suite (spec parsing, projects, types, web). `examples/`
 holds the flawed demo API, its config, and an Azure Pipelines file. `docs/` holds guides for

@@ -1,4 +1,4 @@
-"""Finding a running application's OpenAPI document (apitest.discover)."""
+"""Finding a running application's OpenAPI document (sprat.discover)."""
 import json
 import ssl
 import threading
@@ -7,8 +7,8 @@ import httpx
 import pytest
 import yaml
 
-import apitest.discover as discover
-from apitest.discover import (SPEC_PATHS, UI_PATHS, UI_SCRIPTS, _extract_object, _summary, from_ui_text,
+import sprat.discover as discover
+from sprat.discover import (SPEC_PATHS, UI_PATHS, UI_SCRIPTS, _extract_object, _summary, from_ui_text,
                               not_found_message, parse_spec, resolve_page)
 
 CTX = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -279,7 +279,7 @@ def test_tls_errors_are_explained(web):
         "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate "
         "(_ssl.c:1028)")
     res = discover.discover("https://h.test/openapi.json")
-    assert res["error"].startswith("The server's HTTPS certificate was rejected") and "APITEST_CA_BUNDLE" in res["error"]
+    assert res["error"].startswith("The server's HTTPS certificate was rejected") and "SPRAT_CA_BUNDLE" in res["error"]
 
 
 def test_timeout_is_retried_once(web):

@@ -4,8 +4,8 @@ import re
 
 import pytest
 
-from apitest.models import SEVERITIES, Finding, StageResult, sev_rank
-from apitest.report import COLORS, write_reports
+from sprat.models import SEVERITIES, Finding, StageResult, sev_rank
+from sprat.report import COLORS, write_reports
 
 
 # ---------- models ----------
