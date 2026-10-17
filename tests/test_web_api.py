@@ -1090,6 +1090,14 @@ def test_configure_switches_data_dir(client, tmp_path, data):
     assert web.DATA == data.resolve() and web.runs_dir() == data.resolve() / "runs"
 
 
+@pytest.mark.parametrize("text", ["", '{"stages": [{"name": "au'])
+def test_report_being_written_reads_as_not_ready(client, text):
+    d = web.runs_dir() / "20240101-000000-abcdef"
+    d.mkdir(parents=True)
+    (d / "report.json").write_text(text, encoding="utf-8")  # a poll that lands mid-write
+    assert web._report(d.name) is None
+
+
 @pytest.mark.parametrize("rid", ["20240101-000000-abcdef", "..", "%2e%2e", "a.b", "..%5Cprojects"])
 def test_unknown_or_unsafe_run_ids(client, rid):
     assert client.get(f"/api/runs/{rid}").status_code == 404

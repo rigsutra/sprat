@@ -340,7 +340,10 @@ def _load_meta(run_id: str) -> dict | None:
 
 def _report(run_id: str) -> dict | None:
     f = runs_dir() / run_id / "report.json"
-    return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+    except ValueError:  # the run is writing it right now; the next poll gets the whole file
+        return None
 
 
 def _counts(report: dict | None) -> dict | None:
