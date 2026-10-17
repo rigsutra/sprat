@@ -1,4 +1,5 @@
-"""Automatic login: get a token from a login API, use it, and get a new one 30 s before it expires.
+"""Automatic login: get a token from a login API, use it, and get a new one 30 s before it expires
+(halfway through its life for a token that lives under a minute).
 
 The login request (URL, headers, body) may reference environment variables as ${VAR}; that's where
 passwords live. Nothing secret is stored by sprat.
@@ -24,7 +25,7 @@ import httpx
 
 from .config import ENV_REF, expand_env
 
-REFRESH_MARGIN = 30  # seconds before expiry to get a new token
+REFRESH_MARGIN = 30  # seconds before expiry to get a new token; at most half the token's lifetime
 DEFAULT_LIFETIME = 10 * 60  # when the expiry can't be determined
 SECRET_KEY = re.compile(r"pass|pwd|secret|token|api[-_]?key|credential", re.I)
 MAX_REDIRECTS = 10
@@ -190,6 +191,7 @@ class TokenProvider:
         self.variables = variables or {}  # the project's secrets, for ${NAME} in the login request
         self.token: str | None = None
         self.expires_at: float = 0.0
+        self.renew_at: float = 0.0  # when current_token() logs in again
         self.expiry_source = ""
         self.logins = 0
         self.on_login = None  # callback(provider) after each successful login
@@ -209,7 +211,7 @@ class TokenProvider:
 
     def current_token(self) -> str:
         with self._lock:
-            if not self.token or time.time() >= self.expires_at - self.margin:
+            if not self.token or time.time() >= self.renew_at:
                 self._login()
             return self.token
 
@@ -318,6 +320,9 @@ class TokenProvider:
         now = time.time()
         exp, src = self._expiry(doc, token, now)
         self.token, self.expires_at, self.expiry_source = token, exp, src
+        # A token that lives less than twice the margin is renewed halfway through its life instead:
+        # with the full margin it would always look due, and every request would log in again
+        self.renew_at = exp - min(self.margin, max(0.0, exp - now) / 2)
         self.logins += 1
         if self.on_login:
             try:

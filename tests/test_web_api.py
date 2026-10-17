@@ -380,7 +380,7 @@ def test_login_test_with_unsaved_secret(client):
     t = r.json()
     assert t["ok"] and t["header"] == "Authorization" and t["expiry_source"] == "JWT exp claim"
     assert t["token_preview"].endswith("…") and len(t["token_preview"]) == 9
-    assert 800 < t["expires_in"] <= 900 and t["refresh_at"] == t["expires_at"] - web.REFRESH_MARGIN
+    assert 800 < t["expires_in"] <= 900 and t["refresh_at"] == t["expires_at"] - 30  # the token lives ~15 min: full 30 s margin
     assert t["jwt"]["sub"] == "qa@x.test" and t["jwt"]["roles"] == ["qa"]
     assert set(t["jwt"]) == {"sub", "email", "roles", "iat", "exp"}  # other claims aren't echoed
     assert "accessToken" not in r.text and r.text.count(".") < 10

@@ -44,7 +44,7 @@ def run(spec, cfg, out: Path) -> StageResult:
            "REQUESTS_CA_BUNDLE": ca_bundle()}  # also covers loading the schema from its URL
     if cfg.auth_a is not None:
         # Automatic login: a hooks file gives Schemathesis a token provider that renews the token
-        # 30 s before it expires, so long runs don't drift into 401s
+        # before it expires (see TokenProvider), so long runs don't drift into 401s
         hooks = out / "sprat_auth_hooks.py"
         hooks.write_text(AUTH_HOOKS, encoding="utf-8")
         env["SCHEMATHESIS_HOOKS"] = str(hooks)
@@ -126,7 +126,7 @@ from sprat.auth import LoginConfig, TokenProvider
 _provider = TokenProvider(LoginConfig.from_dict(json.loads(os.environ["SPRAT_LOGIN_A"])), "user A")
 
 
-# refresh_interval=None: ask on every request; the provider itself renews 30 s before expiry.
+# refresh_interval=None: ask on every request; the provider itself renews before expiry.
 # retry_on=[]: some tests expect 401 on purpose, so a 401 must not trigger a new login.
 @schemathesis.auth(refresh_interval=None, retry_on=[])
 class SpratLogin:

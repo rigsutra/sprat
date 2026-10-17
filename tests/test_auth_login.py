@@ -468,12 +468,20 @@ def test_to_epoch_direct():
         assert _to_epoch(bad, now) is None
 
 
-def test_lifetime_shorter_than_margin_logs_in_every_time(srv):
-    _respond_with(srv, {"accessToken": "t", "expiresIn": 10})
+def test_short_lived_token_renewed_halfway_not_on_every_request(srv, monkeypatch):
+    now = [1_000_000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: now[0])
+    _respond_with(srv, {"accessToken": "t", "expiresIn": 10})  # shorter than the 30 s margin
     p = TokenProvider(_cfg(expiry="field", expiry_path="expiresIn"))
     for _ in range(3):
         p.headers()
-    assert srv.calls == 3 and p.logins == 3
+    assert srv.calls == 1 and p.renew_at == now[0] + 5
+    now[0] += 4.9
+    p.headers()
+    assert srv.calls == 1
+    now[0] += 0.1  # halfway through the token's life
+    p.headers()
+    assert srv.calls == 2 and p.renew_at == now[0] + 5
 
 
 def test_already_expired_jwt_logs_in_every_time(srv):
@@ -483,14 +491,19 @@ def test_already_expired_jwt_logs_in_every_time(srv):
     assert srv.calls == 2
 
 
-def test_custom_margin(srv):
-    _respond_with(srv, {"accessToken": _jwt(int(time.time()) + 100)})
-    p = TokenProvider(_cfg(), margin=0)
-    p.headers(); p.headers()
+@pytest.mark.parametrize("margin, renew_after", [(0, 100), (10, 90), (30, 70), (80, 50), (200, 50)])
+def test_custom_margin_capped_at_half_the_lifetime(srv, monkeypatch, margin, renew_after):
+    now = [1_000_000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: now[0])
+    _respond_with(srv, {"accessToken": "t", "expiresIn": 100})
+    p = TokenProvider(_cfg(expiry="field", expiry_path="expiresIn"), margin=margin)
+    p.headers()
+    now[0] += renew_after - 0.5
+    p.headers()
     assert srv.calls == 1
-    p = TokenProvider(_cfg(), margin=200)
-    p.headers(); p.headers()
-    assert srv.calls == 3
+    now[0] += 0.5
+    p.headers()
+    assert srv.calls == 2
 
 
 def test_refresh_when_clock_passes_margin(srv, monkeypatch):

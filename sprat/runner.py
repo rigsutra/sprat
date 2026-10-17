@@ -35,7 +35,8 @@ def run_pipeline(cfg: Config, emit: Emit = lambda e: None) -> list[StageResult]:
         def on_login(p):
             left = max(0, int(p.expires_at - time.time()))
             progress(cfg, "auth", f"Logged in as {p.label} (login #{p.logins}). Token valid for {left // 60} min "
-                     f"{left % 60} s (expiry from {p.expiry_source}); a new one is fetched 30 s before it expires.",
+                     f"{left % 60} s (expiry from {p.expiry_source}); a new one is fetched "
+                     f"{max(0, round(p.expires_at - p.renew_at))} s before it expires.",
                      level="ok")
         emit({"type": "spec_loading", "spec": cfg.spec, "msg": "Logging in"})
         make_providers(cfg)  # raises LoginError with a readable message

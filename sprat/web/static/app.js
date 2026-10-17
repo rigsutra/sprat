@@ -288,7 +288,7 @@ function userAuthHtml(k, title, who, headers, login) {
     <div data-mode="login" ${auto ? "" : "hidden"}>
       <div class="login-test"><button type="button" class="secondary small" data-act="testlogin">Test login</button>
         <span data-out="loginres"></span></div>
-      <p class="hint">sprat logs in when a run starts and fetches a new token 30 seconds before the current one expires.</p>
+      <p class="hint">sprat logs in when a run starts and fetches a new token 30 seconds before the current one expires (halfway through its life if it lasts under a minute).</p>
     </div>
   </fieldset>`;
 }

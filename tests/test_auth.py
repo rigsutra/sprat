@@ -57,20 +57,32 @@ def test_login_uses_env_password_and_jwt_expiry(server):
     assert p.expiry_source == "JWT exp claim" and 55 < p.expires_at - time.time() <= 60
 
 
-def test_refreshes_30s_before_expiry(server):
-    server.ttl = 31  # already inside the 30 s margin after 1 s
+def test_refreshes_30s_before_expiry(server, monkeypatch):
+    now = [1_000_000.0]
+    monkeypatch.setattr(time, "time", lambda: now[0])  # the fake login server reads the same clock
+    server.ttl = 600
     p = TokenProvider(_cfg())
     p.headers()
+    now[0] += 569.9
+    p.headers()
     assert server.calls == 1
-    time.sleep(1.1)
-    p.headers()  # 31 - 1.1 < 30 -> must log in again
+    now[0] += 0.1  # 30 s before the JWT's exp
+    p.headers(); p.headers(); p.headers()  # one renewal, then the new token is reused
     assert server.calls == 2
-    p.headers()  # the new token still has ~31 s: no login
+
+
+def test_short_jwt_renewed_halfway(server, monkeypatch):
+    now = [1_000_000.0]
+    monkeypatch.setattr(time, "time", lambda: now[0])
+    server.ttl = 20  # shorter than the 30 s margin: renewed after 10 s, not on every request
+    p = TokenProvider(_cfg())
+    p.headers(); p.headers()
+    now[0] += 9.9
+    p.headers()
+    assert server.calls == 1
+    now[0] += 0.1
+    p.headers()
     assert server.calls == 2
-    server.ttl = 600
-    time.sleep(1.1)
-    p.headers(); p.headers(); p.headers()  # one renewal, then the 600 s token is reused
-    assert server.calls == 3
 
 
 def test_token_types_and_expiry_modes(server):

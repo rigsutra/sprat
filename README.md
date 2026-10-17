@@ -184,8 +184,8 @@ expires, give sprat the login API and it fetches tokens itself:
 5. **Test login** shows when the token expires and when sprat would renew it.
 
 During a run sprat logs in at the start and fetches a new token **30 seconds
-before the current one expires**: in its own tests, and inside Schemathesis (through
-a generated hooks file). ZAP gets the token through its replacer rules; during the
+before the current one expires** (halfway through its life if it lasts under a
+minute): in its own tests, and inside Schemathesis (through a generated hooks file). ZAP gets the token through its replacer rules; during the
 scan sprat logs in again 90 seconds before expiry and swaps the rule through ZAP's
 API (published on 127.0.0.1 only), so long scans don't end in 401s. Wrong credentials stop the run before anything is
 tested, with the login API's error message. User A and user B each have their own

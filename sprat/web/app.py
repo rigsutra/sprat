@@ -41,7 +41,7 @@ import os
 from .. import coverage as coverage_mod
 from ..secretstore import SecretStore
 from ..secretstore import check_name as check_secret_name
-from ..auth import REFRESH_MARGIN, LoginConfig, LoginError, TokenProvider, jwt_claims, literal_secrets
+from ..auth import LoginConfig, LoginError, TokenProvider, jwt_claims, literal_secrets
 from .. import htmlreport, triage
 from ..explain import failure_body, server_said
 from ..stages.conformance import log_scenarios
@@ -607,7 +607,7 @@ def login_test(body: LoginTestIn):
     claims = jwt_claims(tok) or {}
     return {"ok": True, "header": next(iter(prov.headers())), "token_preview": tok[:8] + "…",
             "expires_at": prov.expires_at, "expires_in": int(prov.expires_at - time.time()),
-            "expiry_source": prov.expiry_source, "refresh_at": prov.expires_at - REFRESH_MARGIN,
+            "expiry_source": prov.expiry_source, "refresh_at": prov.renew_at,
             "jwt": {k: claims[k] for k in ("sub", "email", "roles", "iat", "exp") if k in claims}}
 
 
