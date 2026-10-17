@@ -5,24 +5,50 @@ import json
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+import httpx
+
 from ..models import Finding, StageResult
-from ..auth import current_headers
-from ..proc import progress, run_cmd
+from ..auth import LoginError, current_headers
+from ..proc import Cancelled, progress, run_cmd
 from ..testlog import OpMatcher, log_of
 
 RISK = {"3": "high", "2": "medium", "1": "low", "0": "info"}
+ZAP_PORT = 8090      # ZAP's proxy/API port inside the container
+RENEW_AHEAD = 90     # seconds before expiry to log in again and hand ZAP the new token
+RENEW_EVERY = 15     # seconds between token checks during the scan
+SNAPSHOT_EVERY = 120  # seconds between saved partial reports during the scan
 
 
 def _docker_ok() -> bool:
     if not shutil.which("docker"):
         return False
     return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+
+
+def _docker_resources() -> tuple[int, int]:
+    """CPUs and memory (MB) Docker can give a container; (0, 0) if it doesn't say."""
+    try:
+        p = subprocess.run(["docker", "info", "--format", "{{.NCPU}} {{.MemTotal}}"], capture_output=True,
+                           text=True, timeout=30)
+        cpus, mem = p.stdout.split()
+        return int(cpus), int(mem) // 2**20
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0, 0
+
+
+def _sizing(cfg) -> tuple[int, int]:
+    """ZAP's parallel requests and Java heap (MB, 0 = ZAP's default of 1/4 of memory), from what Docker has.
+    Requests mostly wait on the API, so several threads per CPU, capped so a small API isn't flooded."""
+    cpus, mem = _docker_resources()
+    threads = cfg.zap_threads if cfg.zap_threads > 0 else min(max(cpus * 4, 8), 48) if cpus else 16
+    return threads, mem // 2 if mem >= 2048 else 0
 
 
 def _for_container(url: str) -> str:
@@ -32,6 +58,99 @@ def _for_container(url: str) -> str:
         netloc = (userinfo + "@" if userinfo else "") + "host.docker.internal" + (f":{u.port}" if u.port else "")
         return urlunparse(u._replace(netloc=netloc))
     return url
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class _TokenRenewer:
+    """ZAP sends the login token through replacer rules set at start. A scan can outlast the token, so
+    during the scan this logs in again before expiry and swaps the rules through ZAP's API (its port is
+    published on 127.0.0.1 only; zap-api-scan.py runs ZAP with the API key disabled)."""
+
+    def __init__(self, cfg, port: int, headers: dict[str, str]):
+        # ZAP answers API calls for http://zap/ sent through it as a proxy; a direct call to the
+        # published port would be forwarded, as the port differs from the one ZAP listens on
+        self.cfg, self.proxy, self.api = cfg, f"http://127.0.0.1:{port}", "http://zap/JSON/replacer/action/"
+        self.sent = dict(headers)
+        self.rule = {k: f"h{i}" for i, k in enumerate(headers)}  # header -> replacer rule now in ZAP
+        self.stale: list[str] = []  # replaced rules still to remove from ZAP
+        self.gen, self.next_check, self.warned = 0, 0.0, False
+
+    def tick(self) -> None:
+        now = time.time()
+        if now < self.next_check:
+            return
+        self.next_check = now + RENEW_EVERY
+        try:
+            self.cfg.auth_a.ensure_valid_for(RENEW_AHEAD)
+            want = current_headers(self.cfg)
+        except LoginError as e:
+            self._warn(f"Couldn't renew the token for ZAP ({e}); later requests may get 401.")
+            return
+        changed = {k: v for k, v in want.items() if self.sent.get(k) != v}
+        if not changed and not self.stale:
+            return
+        try:
+            with httpx.Client(proxy=self.proxy, timeout=5) as c:
+                for k, v in changed.items():
+                    # New rule first, old one removed after, so no request goes out without the header
+                    self.gen += 1
+                    new = f"h{list(want).index(k)}r{self.gen}"
+                    c.get(self.api + "addRule/", params={
+                        "description": new, "enabled": "true", "matchType": "REQ_HEADER", "matchRegex": "false",
+                        "matchString": k, "replacement": v, "initiators": ""}).raise_for_status()
+                    if k in self.rule:
+                        self.stale.append(self.rule[k])
+                    self.rule[k], self.sent[k] = new, v
+                while self.stale:
+                    c.get(self.api + "removeRule/", params={"description": self.stale[0]}).raise_for_status()
+                    self.stale.pop(0)
+        except httpx.HTTPError:
+            # ZAP still starting (API not up yet) or busy: try again shortly
+            self.next_check = now + 2
+            return
+        if changed:
+            progress(self.cfg, "zap", "Gave ZAP a renewed login token")
+
+    def _warn(self, msg: str) -> None:
+        if not self.warned:
+            self.warned = True
+            progress(self.cfg, "zap", msg, level="warn")
+
+
+class _Snapshot:
+    """zap-api-scan.py writes its report only when the whole scan ends. Save ZAP's alerts so far every
+    few minutes, and once more on stop or timeout, so a stopped or killed run keeps what ZAP found."""
+
+    def __init__(self, port: int, out: Path):
+        self.proxy, self.out = f"http://127.0.0.1:{port}", out
+        self.path = out / "zap-partial.json"
+        self.next = time.time() + SNAPSHOT_EVERY
+
+    def tick(self) -> None:
+        if time.time() >= self.next:
+            self.save()
+            self.next = time.time() + SNAPSHOT_EVERY
+
+    def save(self, html: bool = False) -> None:
+        """Same API calls zap-api-scan.py makes for zap.json / zap.html. Best effort: ZAP may not be up."""
+        files = [("jsonreport", self.path)] + ([("htmlreport", self.out / "zap-partial.html")] if html else [])
+        try:
+            with httpx.Client(proxy=self.proxy, timeout=30) as c:
+                for report, path in files:
+                    r = c.get(f"http://zap/OTHER/core/other/{report}/")
+                    r.raise_for_status()
+                    if report == "jsonreport":
+                        json.loads(r.text)
+                    tmp = path.with_name(path.name + ".tmp")
+                    tmp.write_text(r.text, encoding="utf-8")
+                    tmp.replace(path)
+        except (httpx.HTTPError, ValueError, OSError):
+            pass
 
 
 # Lines from zap-api-scan.py's debug log (-d, written to stderr), in the order they appear
@@ -66,35 +185,59 @@ def run(spec, cfg, out: Path) -> StageResult:
         return res
     base = cfg.base_url or spec.base_url
     (out / "spec.json").write_text(spec.text, encoding="utf-8")
-    zap_opts = []
-    if cfg.auth_a is not None:
-        # ZAP gets one fixed token at start and can't refresh it: make sure it has a fresh one
-        cfg.auth_a.ensure_valid_for(20 * 60)
-        left = int(cfg.auth_a.expires_at - time.time())
-        if left < 15 * 60:
-            progress(cfg, "zap", f"Note: the token lasts {left // 60} min and ZAP can't renew it mid-scan; "
-                                 "if the scan takes longer, its last requests will get 401.", level="warn")
-    for i, (k, v) in enumerate(current_headers(cfg).items()):
+    threads, heap = _sizing(cfg)
+    zap_opts = ["-config", f"scanner.threadPerHost={threads}",
+                "-config", f"scanner.maxRuleDurationInMins={max(0, cfg.zap_rule_minutes)}",
+                "-config", f"scanner.maxScanDurationInMins={max(0, cfg.zap_max_minutes)}"]
+    headers = current_headers(cfg)
+    for i, (k, v) in enumerate(headers.items()):
         for opt in (f"description=h{i}", "enabled=true", "matchtype=REQ_HEADER", f"matchstr={k}", "regex=false",
                     f"replacement={v}"):
             zap_opts += ["-config", f"replacer.full_list({i}).{opt}"]
+    if heap:
+        zap_opts.append(f"-Xmx{heap}m")  # zap.sh uses it in place of its default heap
     name = f"apitest-zap-{uuid.uuid4().hex[:8]}"
     cmd = ["docker", "run", "--rm", "--name", name, "--add-host", "host.docker.internal:host-gateway",
-           "-v", f"{out.resolve()}:/zap/wrk:rw", cfg.zap_image, "zap-api-scan.py",
-           "-t", "spec.json", "-f", "openapi", "-O", _for_container(base),
-           "-J", "zap.json", "-r", "zap.html", "-I", "-d"]  # -d: debug output includes scan progress %
-    if zap_opts:
-        cmd += ["-z", shlex.join(zap_opts)]  # ZAP shlex-splits -z, so values with spaces must be quoted
-    progress(cfg, "zap", "Starting the OWASP ZAP container")
-    # Killing the docker client doesn't stop the container, so remove it by name on cancel
-    p = run_cmd(cmd, cancel=cfg.cancel, timeout=3600,
-                on_cancel=lambda: subprocess.run(["docker", "rm", "-f", name], capture_output=True),
-                on_tick=lambda lines: _live(cfg, lines))
-    (out / "zap.log").write_text(p.stdout + "\n" + p.stderr, encoding="utf-8")
-    zf = out / "zap.json"
-    if not zf.exists():
-        res.status, res.note = "error", (p.stderr or p.stdout)[-600:]
-        return res
+           "-v", f"{out.resolve()}:/zap/wrk:rw"]
+    # ZAP's API, published to this machine only: renews the login token mid-scan and saves partial reports
+    port = _free_port()
+    renewer = _TokenRenewer(cfg, port, headers) if cfg.auth_a is not None else None
+    snap = _Snapshot(port, out)
+    cmd += ["-p", f"127.0.0.1:{port}:{ZAP_PORT}", cfg.zap_image, "zap-api-scan.py",
+            "-t", "spec.json", "-f", "openapi", "-O", _for_container(base),
+            "-J", "zap.json", "-r", "zap.html", "-I", "-d",  # -d: debug output includes scan progress %
+            "-P", str(ZAP_PORT), "-z", shlex.join(zap_opts)]  # ZAP shlex-splits -z, so values with spaces must be quoted
+    progress(cfg, "zap", f"Starting the OWASP ZAP container ({threads} parallel requests"
+                         + (f", {heap / 1024:.1f} GB memory)" if heap else ")"))
+    # Killing the docker client doesn't stop the container, so remove it by name on cancel and timeout
+    def stop():
+        progress(cfg, "zap", "Saving what ZAP found so far")
+        snap.save(html=True)
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+    # Startup, spider, passive scan and the report come on top of the active scan's own limit
+    timeout = (cfg.zap_max_minutes + 30) * 60 if cfg.zap_max_minutes > 0 else 24 * 3600
+    stopped = ""
+    try:
+        p = run_cmd(cmd, cancel=cfg.cancel, timeout=timeout, on_cancel=stop,
+                    on_tick=lambda lines: (_live(cfg, lines), renewer and renewer.tick(), snap.tick()))
+    except Cancelled:
+        if not snap.path.exists():
+            raise
+        stopped, status = "Stopped by user", "cancelled"
+    except subprocess.TimeoutExpired:
+        stop()
+        if not snap.path.exists():
+            raise
+        stopped, status = f"Timed out after {timeout // 60} min", "error"
+    if stopped:
+        zf, log = snap.path, ""
+    else:
+        zf, log = out / "zap.json", p.stdout + "\n" + p.stderr
+        (out / "zap.log").write_text(log, encoding="utf-8")
+        if not zf.exists():
+            res.status, res.note = "error", (p.stderr or p.stdout)[-600:]
+            return res
     tl = log_of(cfg)
     match = OpMatcher(spec.operations, _for_container(base))
     for site in json.loads(zf.read_text(encoding="utf-8")).get("site", []):
@@ -121,11 +264,15 @@ def run(spec, cfg, out: Path) -> StageResult:
                                 "description": _strip_html(a.get("desc", ""))[:1500],
                                 "reference": _strip_html(a.get("reference", ""))[:600]})
     if tl:
-        imported = re.search(r"Total of (\d+) URLs", p.stdout + p.stderr)
+        imported = re.search(r"Total of (\d+) URLs", log)
         tl.add("zap", "ZAP scan summary", verdict="info",
                details={"message": f"ZAP checked {imported[1] if imported else 'an unknown number of'} URLs. "
                                    "Only requests that raised an alert are listed individually; ZAP's API scan "
                                    "doesn't export every request it sends. Its full HTML report is zap.html."})
+    if stopped:
+        res.status = status
+        res.note = (f"{stopped}: partial results, only the alerts ZAP raised before it stopped. "
+                    "Its HTML report so far is zap-partial.html.")
     return res
 
 

@@ -84,6 +84,7 @@ def run_pipeline(cfg: Config, emit: Emit = lambda e: None) -> list[StageResult]:
             res = StageResult(name, "cancelled", "Stopped by user")
         except Exception as e:  # a broken stage must not hide the others
             res = StageResult(name, "error", f"{type(e).__name__}: {e}")
+        cancelled = cancelled or res.status == "cancelled"  # a stage may stop and still return partial results
         res.duration = time.time() - t
         results.append(res)
         emit({"type": "stage_end", "stage": name, "status": res.status,

@@ -43,6 +43,9 @@ class Config:
     on_progress: Callable[[dict], None] | None = field(default=None, repr=False, compare=False)
     testlog: object | None = field(default=None, repr=False, compare=False)  # testlog.TestLog, set by the runner
     zap_image: str = "ghcr.io/zaproxy/zaproxy:stable"
+    zap_threads: int = 0         # parallel requests to the API; 0 = sized from Docker's CPUs
+    zap_rule_minutes: int = 2    # per active-scan rule, so all ~20 rules get a turn on big APIs; 0 = no limit
+    zap_max_minutes: int = 50    # whole active scan; ZAP then reports what it found so far; 0 = no limit
 
 
 ENV_REF = re.compile(r"\$\{(\w+)\}")

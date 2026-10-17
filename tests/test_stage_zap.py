@@ -76,8 +76,17 @@ def docker(tmp_path, monkeypatch):
     d = FakeDocker(out)
     d.rm = []
     monkeypatch.setattr(zap, "_docker_ok", lambda: True)
+    monkeypatch.setattr(zap, "_docker_resources", lambda: (0, 0))  # unknown: fixed defaults
     monkeypatch.setattr(zap, "run_cmd", d)
     monkeypatch.setattr(zap.subprocess, "run", lambda c, **k: d.rm.append(c))
+    # Partial report from ZAP's API: d.partial (a zap.json-style dict) is "saved" when set
+    d.partial, d.saved = None, []
+
+    def save(self, html=False):
+        d.saved.append((html, len(d.rm)))
+        if d.partial is not None:
+            self.path.write_text(json.dumps(d.partial), encoding="utf-8")
+    monkeypatch.setattr(zap._Snapshot, "save", save)
     return d
 
 
@@ -149,11 +158,14 @@ def test_command_line(docker, tmp_path):
     cmd, kw = docker.calls[0]
     name = cmd[cmd.index("--name") + 1]
     assert name.startswith("apitest-zap-") and len(name) == len("apitest-zap-") + 8
+    port = cmd[cmd.index("-p") + 1]
     assert cmd == ["docker", "run", "--rm", "--name", name, "--add-host", "host.docker.internal:host-gateway",
-                   "-v", f"{docker.out.resolve()}:/zap/wrk:rw", "example/zap:1.2", "zap-api-scan.py",
+                   "-v", f"{docker.out.resolve()}:/zap/wrk:rw", "-p", port, "example/zap:1.2", "zap-api-scan.py",
                    "-t", "spec.json", "-f", "openapi", "-O", "http://host.docker.internal:8000",
-                   "-J", "zap.json", "-r", "zap.html", "-I", "-d"]
-    assert kw["cancel"] is cfg.cancel and kw["timeout"] == 3600
+                   "-J", "zap.json", "-r", "zap.html", "-I", "-d", "-P", "8090", "-z",
+                   "-config scanner.threadPerHost=16 -config scanner.maxRuleDurationInMins=2 "
+                   "-config scanner.maxScanDurationInMins=50"]
+    assert kw["cancel"] is cfg.cancel and kw["timeout"] == 80 * 60
     assert callable(kw["on_cancel"]) and callable(kw["on_tick"])
 
 
@@ -177,14 +189,52 @@ def test_config_base_url_overrides_spec(docker):
 
 def test_no_headers_means_no_replacer_options(docker):
     _run(docker)
-    assert "-z" not in docker.cmd
+    assert "replacer" not in docker.opt("-z")
+
+
+def test_scan_speed_and_time_limits_are_configurable(docker):
+    _run(docker, cfg=Config(zap_threads=24, zap_rule_minutes=0, zap_max_minutes=0))
+    z = shlex.split(docker.opt("-z"))
+    assert z[:6] == ["-config", "scanner.threadPerHost=24", "-config", "scanner.maxRuleDurationInMins=0",
+                     "-config", "scanner.maxScanDurationInMins=0"]
+    assert docker.calls[0][1]["timeout"] == 24 * 3600  # no scan limit: only a safety net
+
+
+@pytest.mark.parametrize("cpus, mem, threads, heap", [
+    (4, 8192, 16, 4096), (1, 1024, 8, 0), (32, 65536, 48, 32768), (0, 0, 16, 0)])
+def test_threads_and_memory_sized_from_docker(docker, monkeypatch, cpus, mem, threads, heap):
+    monkeypatch.setattr(zap, "_docker_resources", lambda: (cpus, mem))
+    got = []
+    _run(docker, cfg=Config(on_progress=got.append))
+    z = shlex.split(docker.opt("-z"))
+    assert z[1] == f"scanner.threadPerHost={threads}"
+    assert [t for t in z if t.startswith("-Xmx")] == ([f"-Xmx{heap}m"] if heap else [])
+    assert got[0]["msg"].startswith(f"Starting the OWASP ZAP container ({threads} parallel requests")
+
+
+def test_configured_threads_win_over_docker_sizing(docker, monkeypatch):
+    monkeypatch.setattr(zap, "_docker_resources", lambda: (32, 65536))
+    _run(docker, cfg=Config(zap_threads=5))
+    assert "scanner.threadPerHost=5" in shlex.split(docker.opt("-z"))
+
+
+def test_docker_resources_parses_docker_info(monkeypatch):
+    monkeypatch.setattr(zap.subprocess, "run", lambda c, **k: SimpleNamespace(stdout="4 8146247680\n"))
+    assert zap._docker_resources() == (4, 7768)
+
+
+@pytest.mark.parametrize("run", [lambda c, **k: SimpleNamespace(stdout=""),
+                                 lambda c, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired(c, 30))])
+def test_docker_resources_unknown(monkeypatch, run):
+    monkeypatch.setattr(zap.subprocess, "run", run)
+    assert zap._docker_resources() == (0, 0)
 
 
 def test_headers_become_replacer_rules(docker):
     _run(docker, cfg=Config(headers={"X-Api-Key": "k123", "X-Tenant": "acme"}))
     z = docker.opt("-z")
     assert docker.cmd[-2] == "-z"
-    tokens = shlex.split(z)  # zap_common.add_zap_options uses shlex.split
+    tokens = shlex.split(z)[6:]  # zap_common.add_zap_options uses shlex.split; first 3 options are scanner.*
     pairs = dict(t.split("=", 1) for t in tokens if t != "-config")
     assert tokens.count("-config") == 12
     assert pairs == {
@@ -202,40 +252,121 @@ def test_header_value_with_space_survives_zap_option_parsing(docker):
 
 
 class FakeProvider:
-    def __init__(self, left):
-        self.left, self.asked = left, []
-        self.expires_at = time.time() + left
+    def __init__(self, token="tok", fail=False):
+        self.token, self.fail, self.asked = token, fail, []
 
     def ensure_valid_for(self, seconds):
         self.asked.append(seconds)
+        if self.fail:
+            raise zap.LoginError("user A: login failed with HTTP 500.")
 
     def headers(self):
-        return {"Authorization": "Bearer-tok"}
+        return {"Authorization": f"Bearer-{self.token}"}
 
 
-def test_login_token_is_refreshed_and_passed(docker):
-    got, prov = [], FakeProvider(3600)
+def test_login_token_is_passed_and_zap_api_published_locally(docker):
+    got, prov = [], FakeProvider()
     _run(docker, cfg=Config(auth_a=prov, headers={"X-A": "1"}, on_progress=got.append))
-    assert prov.asked == [20 * 60]
     z = shlex.split(docker.opt("-z"))
     assert "replacer.full_list(0).matchstr=X-A" in z and "replacer.full_list(1).matchstr=Authorization" in z
     assert "replacer.full_list(1).replacement=Bearer-tok" in z
+    host, port, inner = docker.opt("-p").split(":")
+    assert host == "127.0.0.1" and int(port) > 0 and inner == str(zap.ZAP_PORT)
+    assert docker.cmd.index("-p") < docker.cmd.index("ghcr.io/zaproxy/zaproxy:stable")
+    assert docker.opt("-P") == str(zap.ZAP_PORT)
     assert not [g for g in got if g["level"] == "warn"]
 
 
-def test_short_lived_token_warns(docker):
-    got = []
-    _run(docker, cfg=Config(auth_a=FakeProvider(10 * 60 + 30), on_progress=got.append))
+def test_zap_api_is_published_locally_without_login_too(docker):
+    _run(docker, cfg=Config(headers={"X-A": "1"}))  # for the partial reports
+    assert docker.opt("-p").startswith("127.0.0.1:") and docker.opt("-P") == str(zap.ZAP_PORT)
+
+
+@pytest.fixture
+def zap_api():
+    """A fake ZAP API on 127.0.0.1: records replacer calls."""
+    calls = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            from urllib.parse import parse_qsl, urlsplit
+            u = urlsplit(self.path)
+            assert u.netloc == "zap"  # sent through ZAP as a proxy
+            calls.append((u.path.rsplit("/", 2)[-2], dict(parse_qsl(u.query, keep_blank_values=True))))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"Result": "OK"}')
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield SimpleNamespace(port=srv.server_address[1], calls=calls)
+    srv.shutdown()
+    srv.server_close()
+
+
+def _renewer(port, prov, headers=None, got=None):
+    cfg = Config(auth_a=prov, headers=headers or {}, on_progress=(got if got is not None else []).append)
+    return zap._TokenRenewer(cfg, port, zap.current_headers(cfg))
+
+
+def test_renewer_swaps_the_rule_when_the_token_changes(zap_api):
+    prov, got = FakeProvider("old"), []
+    r = _renewer(zap_api.port, prov, {"X-A": "1"}, got)
+    r.tick()
+    assert zap_api.calls == [] and prov.asked == [zap.RENEW_AHEAD]  # same token: ZAP untouched
+    prov.token, r.next_check = "new", 0
+    r.tick()
+    assert zap_api.calls == [
+        ("addRule", {"description": "h1r1", "enabled": "true", "matchType": "REQ_HEADER", "matchRegex": "false",
+                     "matchString": "Authorization", "replacement": "Bearer-new", "initiators": ""}),
+        ("removeRule", {"description": "h1"})]
+    assert got[-1]["msg"] == "Gave ZAP a renewed login token"
+    prov.token, r.next_check = "newer", 0
+    r.tick()
+    assert zap_api.calls[2][1]["description"] == "h1r2" and zap_api.calls[3] == ("removeRule", {"description": "h1r1"})
+
+
+def test_renewer_checks_at_most_every_interval(zap_api):
+    prov = FakeProvider()
+    r = _renewer(zap_api.port, prov)
+    r.tick()
+    r.tick()
+    assert len(prov.asked) == 1
+
+
+def test_renewer_retries_while_zap_api_is_down(zap_api):
+    prov = FakeProvider("old")
+    r = _renewer(zap._free_port(), prov)  # nothing listens there
+    prov.token = "new"
+    r.tick()
+    assert r.sent["Authorization"] == "Bearer-old" and r.next_check <= time.time() + 2  # retries soon, not in 15 s
+    r.proxy = f"http://127.0.0.1:{zap_api.port}"  # ZAP's API is up now
+    r.next_check = 0
+    r.tick()
+    assert [c[0] for c in zap_api.calls] == ["addRule", "removeRule"] and r.stale == []
+
+
+def test_renewer_login_failure_warns_once(zap_api):
+    got, prov = [], FakeProvider(fail=True)
+    r = _renewer(zap_api.port, FakeProvider(), got=got)
+    r.cfg.auth_a = prov
+    r.tick()
+    r.next_check = 0
+    r.tick()
     warn, = [g for g in got if g["level"] == "warn"]
-    assert warn["stage"] == "zap" and warn["msg"].startswith("Note: the token lasts 10 min")
-    assert "401" in warn["msg"]
+    assert "Couldn't renew the token for ZAP" in warn["msg"] and "401" in warn["msg"]
+    assert zap_api.calls == []
 
 
 def test_progress_messages(docker):
     got = []
     docker.ticks = ["2026-10-02 10:35:35,757 Starting ZAP", "noise", "Active Scan progress %: 40"]
     _run(docker, cfg=Config(on_progress=got.append))
-    assert [g["msg"] for g in got] == ["Starting the OWASP ZAP container", "ZAP is starting up (usually 1–3 minutes)",
+    assert [g["msg"] for g in got] == ["Starting the OWASP ZAP container (16 parallel requests)", "ZAP is starting up (usually 1–3 minutes)",
                                        "Active scan: attacking the APIs 40%"]
 
 
@@ -257,6 +388,47 @@ def test_timeout_propagates(docker, monkeypatch):
     monkeypatch.setattr(zap, "run_cmd", boom)
     with pytest.raises(subprocess.TimeoutExpired):
         _run(docker)
+    assert docker.rm and docker.rm[0][:3] == ["docker", "rm", "-f"]  # the container doesn't outlive the run
+
+
+def test_cancel_keeps_the_alerts_found_so_far(docker):
+    docker.cancel_it, docker.partial = True, {"site": [{"alerts": [_alert(risk="2")]}]}
+    got = []
+    res = _run(docker, cfg=Config(on_progress=got.append))
+    assert res.status == "cancelled" and res.note.startswith("Stopped by user: partial results")
+    assert [(f.severity, f.title) for f in res.findings] == [("medium", "X-Content-Type-Options Header Missing")]
+    assert docker.saved == [(True, 0)] and len(docker.rm) == 1  # saved with HTML, before the container went
+    assert "Saving what ZAP found so far" in [g["msg"] for g in got]
+    assert not (docker.out / "zap.log").exists()
+
+
+def test_timeout_keeps_the_alerts_found_so_far(docker, monkeypatch):
+    def boom(cmd, **kw):
+        raise subprocess.TimeoutExpired(cmd, 4800)
+
+    monkeypatch.setattr(zap, "run_cmd", boom)
+    docker.partial = {"site": [{"alerts": [_alert()]}]}
+    res = _run(docker)
+    assert res.status == "error" and res.note.startswith("Timed out after 80 min: partial results")
+    assert len(res.findings) == 1 and len(docker.rm) == 1
+
+
+def test_snapshot_saves_zap_reports_through_its_api(zap_api, tmp_path):
+    s = zap._Snapshot(zap_api.port, tmp_path)
+    s.tick()
+    assert zap_api.calls == []  # not due yet
+    s.next = 0
+    s.tick()
+    assert zap_api.calls[-1][0] == "jsonreport" and (tmp_path / "zap-partial.json").exists()
+    assert s.next > time.time() + zap.SNAPSHOT_EVERY - 5
+    s.save(html=True)
+    assert [c[0] for c in zap_api.calls[-2:]] == ["jsonreport", "htmlreport"]
+    assert (tmp_path / "zap-partial.html").exists() and not list(tmp_path.glob("*.tmp"))
+
+
+def test_snapshot_is_best_effort_while_zap_is_down(tmp_path):
+    zap._Snapshot(zap._free_port(), tmp_path).save(html=True)
+    assert list(tmp_path.iterdir()) == []
 
 
 # ---------- missing / broken report ----------

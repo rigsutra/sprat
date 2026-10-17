@@ -845,7 +845,7 @@ def project_yaml(pid: str):
     for k in ("login_a", "login_b"):
         if not data.get(k):
             data.pop(k, None)
-    for k in ("timeout", "zap_image", "types_max_fields", "operations", "cancel", "on_progress", "testlog", "title",
+    for k in ("timeout", "zap_image", "zap_threads", "zap_rule_minutes", "zap_max_minutes", "types_max_fields", "operations", "cancel", "on_progress", "testlog", "title",
               "auth_a", "auth_b", "variables"):  # runtime-only fields; load_config rejects them
         data.pop(k, None)
     return f"# apitest config for project '{p['name']}'\n" + yaml.safe_dump(data, sort_keys=False)

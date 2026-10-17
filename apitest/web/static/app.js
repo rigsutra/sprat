@@ -705,9 +705,9 @@ async function pageProject(pid, tab) {
     runbar.innerHTML = p.running
       ? `<span class="live">Test running</span> <a href="#/r/${esc(p.running)}">Watch progress</a><span class="grow"></span>
          <button class="stop" data-act="stop">■ Stop</button>`
-      : `<button class="primary" data-act="runAll" ${testable.length && n ? "" : "disabled"}>▶ Run all ${testable.length} API${testable.length === 1 ? "" : "s"}${esc(what)}</button>
+      : `<button class="${selected.size ? "secondary" : "primary"}" data-act="runAll" ${testable.length && n ? "" : "disabled"}>▶ Run all ${testable.length} API${testable.length === 1 ? "" : "s"}${esc(what)}</button>
          ${nExcluded ? `<span class="meta">${nExcluded} excluded</span>` : ""}
-         <button class="secondary" data-act="runSel" ${selected.size && n ? "" : "disabled"}>▶ Run selected (${selected.size})</button>
+         <button class="${selected.size ? "primary" : "secondary"}" data-act="runSel" ${selected.size && n ? "" : "disabled"}>▶ Run selected (${selected.size})${esc(what)}</button>
          <span class="grow"></span>${stageChips()}`;
     $("[data-act=runAll]", runbar)?.addEventListener("click", () => startRun([]));
     $("[data-act=runSel]", runbar)?.addEventListener("click", () => startRun([...selected]));
