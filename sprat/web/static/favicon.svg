@@ -1,8 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#2f5bea"/>
-  <g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9.5 7.5c-2 0-3 1-3 3v2.5c0 1.6-.8 2.5-2 3 1.2.5 2 1.4 2 3v2.5c0 2 1 3 3 3"/>
-    <path d="M22.5 7.5c2 0 3 1 3 3v2.5c0 1.6.8 2.5 2 3-1.2.5-2 1.4-2 3v2.5c0 2-1 3-3 3"/>
-    <path d="M11.5 16.5l3 3 6-6.5"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="SPRAT logo: a sprat fish">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d8fd6"/>
+      <stop offset="0.45" stop-color="#9cc3e4"/>
+      <stop offset="1" stop-color="#eef4f9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="#0f2f4a"/>
+  <!-- tail -->
+  <path d="M38 64 L14 44 C19 52 21 58 21 64 C21 70 19 76 14 84 Z" fill="#6fb0e6"/>
+  <!-- fins -->
+  <path d="M60 47 L69 31 L80 45 Z" fill="#6fb0e6"/>
+  <path d="M66 81 L73 92 L82 81 Z" fill="#6fb0e6"/>
+  <!-- body -->
+  <path d="M112 63 C104 47 80 41 58 47 C49 50 42 56 35 64 C42 72 49 78 58 81 C80 87 104 80 112 63 Z" fill="url(#body)"/>
+  <!-- lateral line and gill -->
+  <path d="M44 64 C62 61 82 60 100 62" fill="none" stroke="#2c6ea8" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <path d="M90 52 C94 58 94 68 90 75" fill="none" stroke="#0f2f4a" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+  <!-- eye -->
+  <circle cx="100" cy="58" r="4.6" fill="#fff"/>
+  <circle cx="101" cy="58" r="2.4" fill="#0f2f4a"/>
+  <!-- bubbles -->
+  <circle cx="114" cy="46" r="3" fill="none" stroke="#9cc3e4" stroke-width="1.8"/>
+  <circle cx="106" cy="36" r="2" fill="none" stroke="#9cc3e4" stroke-width="1.6"/>
 </svg>

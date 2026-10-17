@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.svg" alt="SPRAT logo, a small blue fish" width="140"></p>
+
 # SPRAT
 
 **Spec Probing, Robustness & Attack Testing.** Point SPRAT at an OpenAPI/Swagger
@@ -13,6 +15,8 @@ have done.
 
 The backend language doesn't matter. Everything goes through the spec and HTTP, so
 .NET, Express, Spring, FastAPI and Go APIs all work the same way.
+
+![SPRAT run page: findings for the bundled demo API, most severe first, each with how to fix it](docs/assets/screenshot-run.png)
 
 > **Run it against staging, never production.** Fuzzing and ZAP send thousands of
 > requests, including POST/PUT/DELETE with garbage data. Use test accounts.
@@ -57,7 +61,7 @@ Among other things, SPRAT reports an admin endpoint that never checks the token,
 that accepts any made-up token, an order that user B can read although it belongs
 to user A, a Python traceback sent back for a malformed token, a 500 on a negative
 price, and fields that accept `"1"` for an integer or `"yes"` for a boolean. The
-profile endpoint, which does check ownership, comes out clean. The report is in
+profile endpoint checks ownership, so its BOLA check passes. The report is in
 `reports/demo/report.html`.
 
 For your own API, start the web UI and paste the app's URL. SPRAT finds the spec
@@ -120,6 +124,8 @@ sprat discover https://orders-staging.example.com
 
 ### Inside a project
 
+![APIs tab: every operation grouped by tag with its last result](docs/assets/screenshot-apis.png)
+
 - **APIs** tab — every operation grouped by tag, with its last result (click it to
   see that API's findings). Tick APIs and press **Run selected**, or use **▶ Run** on
   a single row. **Refresh APIs** reloads the Swagger after the app changes.
@@ -137,6 +143,8 @@ what it's doing ("Sending invalid credentials; expecting 401/403", "Field 3/7
 After the run, the feed is kept as a collapsed **Activity log**.
 
 ### HTML report
+
+![HTML report: summary counts and problems grouped by root cause](docs/assets/screenshot-report.png)
 
 Run page → **Open HTML report** (also inside the ZIP as `test-report.html`). One
 self-contained file you can open offline or send to someone:
