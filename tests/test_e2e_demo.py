@@ -308,19 +308,18 @@ def test_config_file_with_automatic_login_and_token_refresh(demo_short_ttl, work
     path.write_text(yaml.safe_dump(login_config(srv.base, out)), encoding="utf-8")
     assert httpx.get(f"{srv.base}/auth/stats").json()["ttl"] == 34
     before = srv.logins()
-    started = time.time()
     rc = main(["run", "--config", str(path), "--stages", FAST])
-    took = time.time() - started
     stdout = capsys.readouterr().out
     report = read_report(out)
 
     assert all(s["status"] == "ok" for s in report["stages"]), report["stages"]
     assert rc == 1 == expected_exit(report)  # findings, not a login error (2)
     assert "Logged in as user A (login #1)" in stdout and "Logged in as user B (login #1)" in stdout
-    # the run outlived the first tokens: sprat logged in again by itself
+    # the run outlived the first tokens: sprat logged in again by itself. Checked by the logins, not
+    # by the run's duration: renewal is due ~4 s after login (34 s TTL, 30 s early), and exp is whole
+    # seconds, so a fast machine can renew and finish in under 4 s
     logins = srv.logins() - before
-    # renewal is due 34 - 30 = 4 s after login; how far past that the run goes depends on the machine
-    assert took > 4 and logins > 3, (took, logins)  # 2 initial logins + Schemathesis' own + renewals
+    assert logins > 3, logins  # 2 initial logins + Schemathesis' own + renewals
     assert "(login #2)" in stdout
     # ...and in time: no request was ever refused because its token had expired
     entries = log_entries(out)
